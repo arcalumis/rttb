@@ -1,0 +1,28 @@
+{
+	"name": "arcalum.is/rtt4b",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "tsc -b && vite build",
+		"lint": "biome lint .",
+		"format": "biome format . --write",
+		"check": "biome check .",
+		"preview": "vite preview"
+	},
+	"dependencies": {
+		"@tailwindcss/vite": "^4.1.4",
+		"react": "^19.0.0",
+		"react-dom": "^19.0.0",
+		"tailwindcss": "^4.1.4"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@types/react": "^19.0.10",
+		"@types/react-dom": "^19.0.4",
+		"@vitejs/plugin-react-swc": "^3.8.0",
+		"typescript": "~5.7.2",
+		"vite": "^6.3.1"
+	}
+}
