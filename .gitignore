@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated images, uploads and database
+generated-images/
+uploads/
+data/
+
+# Environment variables
+.env
+.env.local

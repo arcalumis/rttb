@@ -1,0 +1,162 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import type { FastifyInstance } from "fastify";
+import { getDb } from "../db";
+import { authMiddleware } from "../middleware/auth";
+
+const UPLOADS_DIR = path.join(process.cwd(), "uploads");
+
+interface UploadRow {
+	id: string;
+	user_id: string;
+	filename: string;
+	original_name: string;
+	created_at: string;
+	deleted_at: string | null;
+	archived_at: string | null;
+}
+
+interface UploadsQuery {
+	trash?: string;
+	archived?: string;
+}
+
+interface TrashBody {
+	deleted: boolean;
+}
+
+interface ArchiveBody {
+	archived: boolean;
+}
+
+export async function uploadsRoutes(fastify: FastifyInstance): Promise<void> {
+	// Ensure uploads directory exists
+	if (!fs.existsSync(UPLOADS_DIR)) {
+		fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+	}
+
+	// Upload image
+	fastify.post("/api/uploads", { preHandler: authMiddleware }, async (request, reply) => {
+		const data = await request.file();
+
+		if (!data) {
+			return reply.status(400).send({ error: "No file uploaded" });
+		}
+
+		const buffer = await data.toBuffer();
+		const ext = path.extname(data.filename) || ".png";
+		const id = crypto.randomUUID();
+		const filename = `${id}${ext}`;
+		const filePath = path.join(UPLOADS_DIR, filename);
+
+		fs.writeFileSync(filePath, buffer);
+
+		const db = getDb();
+		db.prepare(
+			"INSERT INTO uploads (id, user_id, filename, original_name) VALUES (?, ?, ?, ?)",
+		).run(id, request.user?.userId, filename, data.filename);
+
+		return {
+			id,
+			filename,
+			originalName: data.filename,
+			imageUrl: `/uploads/${filename}`,
+		};
+	});
+
+	// List user's uploads
+	fastify.get<{ Querystring: UploadsQuery }>(
+		"/api/uploads",
+		{ preHandler: authMiddleware },
+		async (request) => {
+			const showTrash = request.query.trash === "true";
+			const showArchived = request.query.archived === "true";
+
+			let condition: string;
+			if (showTrash) {
+				condition = "deleted_at IS NOT NULL";
+			} else if (showArchived) {
+				condition = "archived_at IS NOT NULL AND deleted_at IS NULL";
+			} else {
+				condition = "deleted_at IS NULL AND archived_at IS NULL";
+			}
+
+			const db = getDb();
+			const rows = db
+				.prepare(
+					`SELECT * FROM uploads WHERE user_id = ? AND ${condition} ORDER BY created_at DESC`,
+				)
+				.all(request.user?.userId) as UploadRow[];
+
+			return {
+				uploads: rows.map((row) => ({
+					id: row.id,
+					filename: row.filename,
+					originalName: row.original_name,
+					imageUrl: `/uploads/${row.filename}`,
+					createdAt: row.created_at,
+					deletedAt: row.deleted_at || undefined,
+					archivedAt: row.archived_at || undefined,
+					isUpload: true,
+				})),
+			};
+		},
+	);
+
+	// PATCH - Soft delete (move to trash) or restore
+	fastify.patch<{ Params: { id: string }; Body: TrashBody }>(
+		"/api/uploads/:id",
+		{ preHandler: authMiddleware },
+		async (request, reply) => {
+			const { id } = request.params;
+			const { deleted } = request.body;
+
+			const db = getDb();
+			const row = db
+				.prepare("SELECT id FROM uploads WHERE id = ? AND user_id = ?")
+				.get(id, request.user?.userId) as { id: string } | undefined;
+
+			if (!row) {
+				return reply.status(404).send({ error: "Upload not found" });
+			}
+
+			if (deleted) {
+				db.prepare("UPDATE uploads SET deleted_at = datetime('now') WHERE id = ?").run(id);
+			} else {
+				db.prepare("UPDATE uploads SET deleted_at = NULL WHERE id = ?").run(id);
+			}
+
+			return { success: true };
+		},
+	);
+
+	// DELETE - Permanently delete upload
+	fastify.delete<{ Params: { id: string } }>(
+		"/api/uploads/:id",
+		{ preHandler: authMiddleware },
+		async (request, reply) => {
+			const { id } = request.params;
+			const db = getDb();
+
+			const row = db
+				.prepare("SELECT * FROM uploads WHERE id = ? AND user_id = ?")
+				.get(id, request.user?.userId) as UploadRow | undefined;
+
+			if (!row) {
+				return reply.status(404).send({ error: "Upload not found" });
+			}
+
+			// Delete file
+			const filePath = path.join(UPLOADS_DIR, row.filename);
+			if (fs.existsSync(filePath)) {
+				fs.unlinkSync(filePath);
+			}
+
+			// Delete record
+			db.prepare("DELETE FROM uploads WHERE id = ?").run(id);
+
+			return { success: true };
+		},
+	);
+}

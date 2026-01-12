@@ -1,0 +1,66 @@
+# Production docker-compose with Caddy reverse proxy
+# Usage: docker compose -f docker-compose.prod.yml up -d
+#
+# Prerequisites:
+# 1. Set DOMAIN in your environment or .env.production file
+# 2. Point your domain's DNS A record to your server's IP
+# 3. Ensure ports 80 and 443 are open
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    env_file:
+      - .env.production
+    volumes:
+      - app_data:/app/data
+      - app_images:/app/generated-images
+      - app_uploads:/app/uploads
+    networks:
+      - internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3 support
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    networks:
+      - internal
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  app_data:
+    name: yoga_tank_data
+  app_images:
+    name: yoga_tank_images
+  app_uploads:
+    name: yoga_tank_uploads
+  caddy_data:
+    name: yoga_tank_caddy_data
+  caddy_config:
+    name: yoga_tank_caddy_config

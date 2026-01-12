@@ -1,44 +1,116 @@
 @import "tailwindcss";
 
-#root {
-	max-width: 1280px;
-	margin: 0 auto;
-	padding: 2rem;
-	text-align: center;
+/* Cyberpunk color variables */
+:root {
+	--neon-pink: #ff2a6d;
+	--neon-cyan: #05d9e8;
+	--neon-purple: #d300c5;
+	--neon-yellow: #f9f002;
+	--dark-bg: #0f0f1a;
+	--card-bg: rgba(15, 15, 26, 0.8);
+	--card-border: rgba(5, 217, 232, 0.2);
 }
 
-.logo {
-	height: 6em;
-	padding: 1.5em;
-	will-change: filter;
-	transition: filter 300ms;
-}
-.logo:hover {
-	filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-	filter: drop-shadow(0 0 2em #61dafbaa);
+/* Ensure select elements work properly */
+select {
+	appearance: none;
+	-webkit-appearance: none;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2305d9e8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 0.5rem center;
+	background-size: 1.25rem;
+	padding-right: 2.5rem !important;
 }
 
-@keyframes logo-spin {
-	from {
-		transform: rotate(0deg);
-	}
-	to {
-		transform: rotate(360deg);
-	}
+/* Neon glow effects */
+.neon-border {
+	border: 1px solid var(--neon-cyan);
+	box-shadow: 0 0 10px rgba(5, 217, 232, 0.3), inset 0 0 10px rgba(5, 217, 232, 0.1);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-	a:nth-of-type(2) .logo {
-		animation: logo-spin infinite 20s linear;
-	}
+.neon-border-pink {
+	border: 1px solid var(--neon-pink);
+	box-shadow: 0 0 10px rgba(255, 42, 109, 0.3), inset 0 0 10px rgba(255, 42, 109, 0.1);
 }
 
-.card {
-	padding: 2em;
+.neon-text {
+	text-shadow: 0 0 10px var(--neon-cyan), 0 0 20px var(--neon-cyan);
 }
 
-.read-the-docs {
-	color: #888;
+.neon-text-pink {
+	text-shadow: 0 0 10px var(--neon-pink), 0 0 20px var(--neon-pink);
+}
+
+/* Gradient text */
+.gradient-text {
+	background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan));
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+}
+
+/* Card styling */
+.cyber-card {
+	background: var(--card-bg);
+	border: 1px solid var(--card-border);
+	backdrop-filter: blur(10px);
+}
+
+.cyber-card:hover {
+	border-color: rgba(5, 217, 232, 0.4);
+	box-shadow: 0 0 20px rgba(5, 217, 232, 0.15);
+}
+
+/* Input styling */
+.cyber-input {
+	background: rgba(15, 15, 26, 0.6);
+	border: 1px solid rgba(5, 217, 232, 0.3);
+	transition: all 0.2s ease;
+}
+
+.cyber-input:focus {
+	border-color: var(--neon-cyan);
+	box-shadow: 0 0 10px rgba(5, 217, 232, 0.3);
+	outline: none;
+}
+
+/* Button styling */
+.cyber-button {
+	background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
+	border: none;
+	transition: all 0.2s ease;
+}
+
+.cyber-button:hover {
+	box-shadow: 0 0 20px rgba(255, 42, 109, 0.5);
+	transform: translateY(-1px);
+}
+
+.cyber-button:disabled {
+	background: #333;
+	box-shadow: none;
+	transform: none;
+}
+
+/* Animated gradient border */
+@keyframes gradient-shift {
+	0% { background-position: 0% 50%; }
+	50% { background-position: 100% 50%; }
+	100% { background-position: 0% 50%; }
+}
+
+.animated-border {
+	background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan), var(--neon-purple), var(--neon-pink));
+	background-size: 300% 300%;
+	animation: gradient-shift 3s ease infinite;
+}
+
+/* Pulse glow animation */
+@keyframes pulse-glow {
+	0%, 100% { box-shadow: 0 0 5px rgba(5, 217, 232, 0.5); }
+	50% { box-shadow: 0 0 20px rgba(5, 217, 232, 0.8); }
+}
+
+.pulse-glow {
+	animation: pulse-glow 2s ease-in-out infinite;
 }
