@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { API_BASE } from "../config";
-import type { GenerateRequest, GenerateResponse, HistoryResponse, ModelsResponse } from "../types";
+import type { GenerateRequest, GenerateResponse, HistoryResponse, ModelsResponse, Thread, ThreadsResponse } from "../types";
 
 function getAuthHeaders(token: string | null, includeContentType = true): HeadersInit {
 	const headers: HeadersInit = {};
@@ -50,6 +50,29 @@ export function useGenerate(token: string | null) {
 	return { generate, loading, error };
 }
 
+export function useEnhancePrompt(token: string | null) {
+	const enhance = useCallback(
+		async (prompt: string, hasImages?: boolean): Promise<string> => {
+			const response = await fetch(`${API_BASE}/api/enhance-prompt`, {
+				method: "POST",
+				headers: getAuthHeaders(token),
+				body: JSON.stringify({ prompt, hasImages }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || "Enhancement failed");
+			}
+
+			return data.enhanced;
+		},
+		[token],
+	);
+
+	return { enhance };
+}
+
 export function useModels() {
 	const [models, setModels] = useState<ModelsResponse["models"]>([]);
 	const [loading, setLoading] = useState(false);
@@ -73,12 +96,15 @@ export function useModels() {
 export function useHistory(token: string | null) {
 	const [history, setHistory] = useState<HistoryResponse | null>(null);
 	const [loading, setLoading] = useState(false);
+	const [currentPage, setCurrentPage] = useState(1);
 
+	// Fetch history (replaces existing data - use for initial load or filter changes)
 	const fetchHistory = useCallback(
 		async (page = 1, limit = 20, trash = false, archived = false) => {
 			if (!token) return;
 
 			setLoading(true);
+			setCurrentPage(page);
 			try {
 				const response = await fetch(
 					`${API_BASE}/api/history?page=${page}&limit=${limit}&trash=${trash}&archived=${archived}`,
@@ -94,6 +120,48 @@ export function useHistory(token: string | null) {
 		},
 		[token],
 	);
+
+	// Fetch more history (appends to existing data - use for infinite scroll)
+	const fetchMoreHistory = useCallback(
+		async (limit = 20, trash = false, archived = false) => {
+			if (!token || loading || !history) return;
+
+			// Check if there are more items to load
+			const loadedCount = history.generations.length;
+			if (loadedCount >= history.total) return;
+
+			const nextPage = currentPage + 1;
+			setLoading(true);
+			try {
+				const response = await fetch(
+					`${API_BASE}/api/history?page=${nextPage}&limit=${limit}&trash=${trash}&archived=${archived}`,
+					{ headers: getAuthHeaders(token) },
+				);
+				const data = (await response.json()) as HistoryResponse;
+
+				// Append new generations to existing ones
+				setHistory((prev) => {
+					if (!prev) return data;
+					return {
+						...data,
+						generations: [...prev.generations, ...data.generations],
+					};
+				});
+				setCurrentPage(nextPage);
+			} catch (err) {
+				console.error("Failed to fetch more history:", err);
+			} finally {
+				setLoading(false);
+			}
+		},
+		[token, loading, history, currentPage],
+	);
+
+	// Reset history (for when filters change)
+	const resetHistory = useCallback(() => {
+		setHistory(null);
+		setCurrentPage(1);
+	}, []);
 
 	const trashGeneration = useCallback(
 		async (id: string) => {
@@ -184,7 +252,7 @@ export function useHistory(token: string | null) {
 		[token],
 	);
 
-	return { history, fetchHistory, trashGeneration, restoreGeneration, archiveGeneration, unarchiveGeneration, deleteGeneration, loading };
+	return { history, fetchHistory, fetchMoreHistory, resetHistory, trashGeneration, restoreGeneration, archiveGeneration, unarchiveGeneration, deleteGeneration, loading };
 }
 
 export function useUploads(token: string | null) {
@@ -265,4 +333,206 @@ export function useUploads(token: string | null) {
 	);
 
 	return { uploads, fetchUploads, archiveUpload, unarchiveUpload, deleteUpload, loading };
+}
+
+export function useThreads(token: string | null) {
+	const [threads, setThreads] = useState<Thread[]>([]);
+	const [activeThread, setActiveThread] = useState<Thread | null>(null);
+	const [loading, setLoading] = useState(false);
+
+	const fetchThreads = useCallback(async () => {
+		if (!token) return;
+
+		setLoading(true);
+		try {
+			const response = await fetch(`${API_BASE}/api/threads`, {
+				headers: getAuthHeaders(token),
+			});
+			const data = (await response.json()) as ThreadsResponse;
+			setThreads(data.threads);
+		} catch (err) {
+			console.error("Failed to fetch threads:", err);
+		} finally {
+			setLoading(false);
+		}
+	}, [token]);
+
+	const fetchThread = useCallback(
+		async (threadId: string) => {
+			if (!token) return null;
+
+			setLoading(true);
+			try {
+				const response = await fetch(`${API_BASE}/api/threads/${threadId}`, {
+					headers: getAuthHeaders(token),
+				});
+				if (!response.ok) return null;
+				const data = (await response.json()) as Thread;
+				setActiveThread(data);
+				return data;
+			} catch (err) {
+				console.error("Failed to fetch thread:", err);
+				return null;
+			} finally {
+				setLoading(false);
+			}
+		},
+		[token],
+	);
+
+	const createThread = useCallback(
+		async (title?: string) => {
+			if (!token) return null;
+
+			try {
+				const response = await fetch(`${API_BASE}/api/threads`, {
+					method: "POST",
+					headers: getAuthHeaders(token),
+					body: JSON.stringify({ title }),
+				});
+				if (!response.ok) return null;
+				const data = (await response.json()) as Thread;
+				setThreads((prev) => [data, ...prev]);
+				return data;
+			} catch (err) {
+				console.error("Failed to create thread:", err);
+				return null;
+			}
+		},
+		[token],
+	);
+
+	const renameThread = useCallback(
+		async (threadId: string, title: string) => {
+			if (!token) return false;
+
+			try {
+				const response = await fetch(`${API_BASE}/api/threads/${threadId}`, {
+					method: "PATCH",
+					headers: getAuthHeaders(token),
+					body: JSON.stringify({ title }),
+				});
+				if (response.ok) {
+					setThreads((prev) =>
+						prev.map((t) => (t.id === threadId ? { ...t, title } : t)),
+					);
+					if (activeThread?.id === threadId) {
+						setActiveThread((prev) => (prev ? { ...prev, title } : null));
+					}
+				}
+				return response.ok;
+			} catch (err) {
+				console.error("Failed to rename thread:", err);
+				return false;
+			}
+		},
+		[token, activeThread],
+	);
+
+	const deleteThread = useCallback(
+		async (threadId: string) => {
+			if (!token) return false;
+
+			try {
+				const response = await fetch(`${API_BASE}/api/threads/${threadId}`, {
+					method: "DELETE",
+					headers: getAuthHeaders(token, false),
+				});
+				if (response.ok) {
+					setThreads((prev) => prev.filter((t) => t.id !== threadId));
+					if (activeThread?.id === threadId) {
+						setActiveThread(null);
+					}
+				}
+				return response.ok;
+			} catch (err) {
+				console.error("Failed to delete thread:", err);
+				return false;
+			}
+		},
+		[token, activeThread],
+	);
+
+	const deleteThreadWithOptions = useCallback(
+		async (threadId: string, deletePhotos: boolean) => {
+			if (!token) return false;
+
+			try {
+				const response = await fetch(
+					`${API_BASE}/api/threads/${threadId}?deletePhotos=${deletePhotos}`,
+					{
+						method: "DELETE",
+						headers: getAuthHeaders(token, false),
+					},
+				);
+				if (response.ok) {
+					if (deletePhotos) {
+						// Thread was deleted - remove from list
+						setThreads((prev) => prev.filter((t) => t.id !== threadId));
+					} else {
+						// Thread was archived - update in list
+						setThreads((prev) =>
+							prev.map((t) =>
+								t.id === threadId
+									? { ...t, archivedAt: new Date().toISOString() }
+									: t,
+							),
+						);
+					}
+					if (activeThread?.id === threadId) {
+						setActiveThread(null);
+					}
+				}
+				return response.ok;
+			} catch (err) {
+				console.error("Failed to delete thread:", err);
+				return false;
+			}
+		},
+		[token, activeThread],
+	);
+
+	const archiveThread = useCallback(
+		async (threadId: string) => {
+			if (!token) return false;
+
+			try {
+				const response = await fetch(`${API_BASE}/api/threads/${threadId}/archive`, {
+					method: "POST",
+					headers: getAuthHeaders(token, false),
+				});
+				if (response.ok) {
+					setThreads((prev) =>
+						prev.map((t) =>
+							t.id === threadId ? { ...t, archivedAt: new Date().toISOString() } : t,
+						),
+					);
+				}
+				return response.ok;
+			} catch (err) {
+				console.error("Failed to archive thread:", err);
+				return false;
+			}
+		},
+		[token],
+	);
+
+	const clearActiveThread = useCallback(() => {
+		setActiveThread(null);
+	}, []);
+
+	return {
+		threads,
+		activeThread,
+		setActiveThread,
+		fetchThreads,
+		fetchThread,
+		createThread,
+		renameThread,
+		deleteThread,
+		deleteThreadWithOptions,
+		archiveThread,
+		clearActiveThread,
+		loading,
+	};
 }
