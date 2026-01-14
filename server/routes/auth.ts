@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
 import type { FastifyInstance } from "fastify";
 import { getDb } from "../db";
 import { adminMiddleware, authMiddleware, signToken } from "../middleware/auth";
@@ -6,17 +7,45 @@ import { sendMagicLinkEmail, sendPasswordResetEmail } from "../services/email";
 import { createEmailToken, markTokenUsed, validateToken } from "../services/tokens";
 import { assignDefaultSubscription } from "../services/usage";
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
+const isProduction = process.env.NODE_ENV === "production";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (isProduction ? undefined : "admin");
+if (!ADMIN_PASSWORD) {
+	throw new Error("CRITICAL: ADMIN_PASSWORD environment variable is required in production.");
+}
+
 const MAGIC_LINK_EXPIRY_MINUTES = Number(process.env.MAGIC_LINK_EXPIRY_MINUTES) || 15;
 const PASSWORD_RESET_EXPIRY_MINUTES = Number(process.env.PASSWORD_RESET_EXPIRY_MINUTES) || 60;
+const BCRYPT_ROUNDS = 12;
 
-// Simple password hashing using crypto
+// Secure password hashing using bcrypt
 function hashPassword(password: string): string {
-	return crypto.createHash("sha256").update(password).digest("hex");
+	return bcrypt.hashSync(password, BCRYPT_ROUNDS);
 }
 
 function verifyPassword(password: string, hash: string): boolean {
-	return hashPassword(password) === hash;
+	// Support legacy SHA-256 hashes (64 char hex) for migration
+	if (hash.length === 64 && /^[a-f0-9]+$/.test(hash)) {
+		const sha256Hash = crypto.createHash("sha256").update(password).digest("hex");
+		return sha256Hash === hash;
+	}
+	return bcrypt.compareSync(password, hash);
+}
+
+// Validate password strength
+function validatePasswordStrength(password: string): { valid: boolean; error?: string } {
+	if (password.length < 8) {
+		return { valid: false, error: "Password must be at least 8 characters" };
+	}
+	if (!/[A-Z]/.test(password)) {
+		return { valid: false, error: "Password must contain at least one uppercase letter" };
+	}
+	if (!/[a-z]/.test(password)) {
+		return { valid: false, error: "Password must contain at least one lowercase letter" };
+	}
+	if (!/[0-9]/.test(password)) {
+		return { valid: false, error: "Password must contain at least one number" };
+	}
+	return { valid: true };
 }
 
 interface LoginBody {
@@ -62,6 +91,16 @@ interface UserRow {
 	is_admin: number;
 }
 
+// Strict rate limit config for auth endpoints (5 attempts per minute)
+const authRateLimit = {
+	config: {
+		rateLimit: {
+			max: 5,
+			timeWindow: "1 minute",
+		},
+	},
+};
+
 export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 	// Create initial admin user if none exists
 	const db = getDb();
@@ -76,8 +115,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 		console.log("Created initial admin user: admin");
 	}
 
-	// Login
-	fastify.post<{ Body: LoginBody }>("/api/login", async (request, reply) => {
+	// Login (rate limited: 5 attempts per minute)
+	fastify.post<{ Body: LoginBody }>("/api/login", authRateLimit, async (request, reply) => {
 		const { username, password } = request.body;
 
 		if (!username || !password) {
@@ -123,8 +162,9 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 				return reply.status(400).send({ error: "Username and password required" });
 			}
 
-			if (password.length < 6) {
-				return reply.status(400).send({ error: "Password must be at least 6 characters" });
+			const passwordCheck = validatePasswordStrength(password);
+			if (!passwordCheck.valid) {
+				return reply.status(400).send({ error: passwordCheck.error });
 			}
 
 			const db = getDb();
@@ -162,8 +202,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
 	// ==================== Email-First Auth Endpoints ====================
 
-	// Check if email exists and has password
-	fastify.post<{ Body: CheckEmailBody }>("/api/auth/check-email", async (request, reply) => {
+	// Check if email exists and has password (rate limited)
+	fastify.post<{ Body: CheckEmailBody }>("/api/auth/check-email", authRateLimit, async (request, reply) => {
 		const { email } = request.body;
 
 		if (!email) {
@@ -186,8 +226,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 		};
 	});
 
-	// Login with email and password
-	fastify.post<{ Body: EmailLoginBody }>("/api/auth/login-email", async (request, reply) => {
+	// Login with email and password (rate limited: 5 attempts per minute)
+	fastify.post<{ Body: EmailLoginBody }>("/api/auth/login-email", authRateLimit, async (request, reply) => {
 		const { email, password, rememberMe } = request.body;
 
 		if (!email || !password) {
@@ -225,8 +265,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 		};
 	});
 
-	// Request magic link email
-	fastify.post<{ Body: MagicLinkBody }>("/api/auth/magic-link", async (request, reply) => {
+	// Request magic link email (rate limited: 5 per minute to prevent spam)
+	fastify.post<{ Body: MagicLinkBody }>("/api/auth/magic-link", authRateLimit, async (request, reply) => {
 		const { email, rememberMe } = request.body;
 
 		if (!email) {
@@ -310,8 +350,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 		},
 	);
 
-	// Request password reset
-	fastify.post<{ Body: ForgotPasswordBody }>("/api/auth/forgot-password", async (request) => {
+	// Request password reset (rate limited: 5 per minute to prevent spam)
+	fastify.post<{ Body: ForgotPasswordBody }>("/api/auth/forgot-password", authRateLimit, async (request) => {
 		const { email } = request.body;
 
 		if (!email) {
@@ -366,16 +406,17 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 		},
 	);
 
-	// Reset password with token
-	fastify.post<{ Body: ResetPasswordBody }>("/api/auth/reset-password", async (request, reply) => {
+	// Reset password with token (rate limited)
+	fastify.post<{ Body: ResetPasswordBody }>("/api/auth/reset-password", authRateLimit, async (request, reply) => {
 		const { token, newPassword } = request.body;
 
 		if (!token || !newPassword) {
 			return reply.status(400).send({ error: "Token and new password required" });
 		}
 
-		if (newPassword.length < 6) {
-			return reply.status(400).send({ error: "Password must be at least 6 characters" });
+		const passwordCheck = validatePasswordStrength(newPassword);
+		if (!passwordCheck.valid) {
+			return reply.status(400).send({ error: passwordCheck.error });
 		}
 
 		const validation = validateToken(token, "password_reset");

@@ -107,14 +107,27 @@ export function initializeSchema(db: Database): void {
 		CREATE INDEX IF NOT EXISTS idx_usage_monthly_user_id ON usage_monthly(user_id);
 	`);
 
+	// Daily usage tracking table (resets at UTC midnight)
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS usage_daily (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id),
+			date TEXT NOT NULL,
+			image_count INTEGER DEFAULT 0,
+			UNIQUE(user_id, date)
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_usage_daily_user_id ON usage_daily(user_id);
+	`);
+
 	// Create default Free subscription product if none exists
 	const existingProduct = db.prepare("SELECT id FROM subscription_products LIMIT 1").get();
 	if (!existingProduct) {
 		const freeProductId = crypto.randomUUID();
 		db.prepare(`
-			INSERT INTO subscription_products (id, name, description, monthly_image_limit, bonus_credits, price)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`).run(freeProductId, "Free", "Free tier with limited generations", 10, 5, 0);
+			INSERT INTO subscription_products (id, name, description, monthly_image_limit, monthly_cost_limit, bonus_credits, price)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`).run(freeProductId, "Free", "Try Yoga Tank with 5 free generations per month", 5, 1.50, 0, 0);
 	}
 
 	// Generations table (base schema without new columns)
@@ -361,6 +374,13 @@ export function initializeSchema(db: Database): void {
 		// Column already exists
 	}
 
+	// Add daily_image_limit to subscription_products
+	try {
+		db.exec("ALTER TABLE subscription_products ADD COLUMN daily_image_limit INTEGER DEFAULT NULL");
+	} catch {
+		// Column already exists
+	}
+
 	// Add stripe_subscription_id to user_subscriptions
 	try {
 		db.exec("ALTER TABLE user_subscriptions ADD COLUMN stripe_subscription_id TEXT");
@@ -408,5 +428,71 @@ export function initializeSchema(db: Database): void {
 		db.exec("ALTER TABLE generations ADD COLUMN is_overage INTEGER DEFAULT 0");
 	} catch {
 		// Column already exists
+	}
+
+	// ============================================
+	// CHAT THREADS
+	// ============================================
+
+	// Threads table for organizing generations into conversations
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS threads (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id),
+			title TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			archived_at DATETIME DEFAULT NULL,
+			deleted_at DATETIME DEFAULT NULL
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_threads_user_id ON threads(user_id);
+		CREATE INDEX IF NOT EXISTS idx_threads_updated_at ON threads(updated_at DESC);
+	`);
+
+	// Add thread_id column to generations
+	try {
+		db.exec("ALTER TABLE generations ADD COLUMN thread_id TEXT REFERENCES threads(id)");
+	} catch {
+		// Column already exists
+	}
+
+	// Create index for thread_id
+	try {
+		db.exec("CREATE INDEX IF NOT EXISTS idx_generations_thread_id ON generations(thread_id)");
+	} catch {
+		// Index already exists
+	}
+
+	// Migrate existing generations to a "History" thread if they don't have a thread_id
+	// This runs on every startup but only affects generations without a thread_id
+	const usersWithOrphanedGenerations = db
+		.prepare(`
+			SELECT DISTINCT user_id FROM generations
+			WHERE thread_id IS NULL AND user_id IS NOT NULL
+		`)
+		.all() as { user_id: string }[];
+
+	for (const { user_id } of usersWithOrphanedGenerations) {
+		// Check if this user already has a "History" thread
+		let historyThread = db
+			.prepare("SELECT id FROM threads WHERE user_id = ? AND title = 'History'")
+			.get(user_id) as { id: string } | undefined;
+
+		if (!historyThread) {
+			// Create a "History" thread for this user
+			const threadId = crypto.randomUUID();
+			db.prepare(`
+				INSERT INTO threads (id, user_id, title, created_at, updated_at)
+				VALUES (?, ?, 'History', datetime('now'), datetime('now'))
+			`).run(threadId, user_id);
+			historyThread = { id: threadId };
+		}
+
+		// Assign all orphaned generations to the History thread
+		db.prepare(`
+			UPDATE generations SET thread_id = ?
+			WHERE user_id = ? AND thread_id IS NULL
+		`).run(historyThread.id, user_id);
 	}
 }

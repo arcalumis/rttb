@@ -6,7 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useAdminProducts, useAdminUsers } from "../hooks/useAdmin";
 import type { AdminUser } from "../types";
 
-export function AdminUsers() {
+export default function AdminUsers() {
 	const { token } = useAuth();
 	const { users, total, loading, fetchUsers, updateUser, addCredits, assignSubscription, createUser } =
 		useAdminUsers(token);

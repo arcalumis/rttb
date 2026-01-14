@@ -55,7 +55,7 @@ interface AllTimeStats {
 
 type PeriodOption = "mtd" | "qtd" | "ytd" | "last30" | "last90";
 
-export function AdminFinancials() {
+export default function AdminFinancials() {
 	const { token } = useAuth();
 	const [period, setPeriod] = useState<PeriodOption>("mtd");
 	const [overview, setOverview] = useState<FinancialOverview | null>(null);
@@ -106,10 +106,6 @@ export function AdminFinancials() {
 			style: "currency",
 			currency: "USD",
 		}).format(value);
-	};
-
-	const formatPercent = (value: number) => {
-		return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 	};
 
 	const periodLabels: Record<PeriodOption, string> = {

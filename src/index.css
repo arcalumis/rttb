@@ -1,10 +1,22 @@
+/* Theme CSS Variables - defaults (overridden by ThemeContext) */
 :root {
-	font-family: "JetBrains Mono", "Courier New", Courier, monospace;
+	--bg-primary: #1c1c1c;
+	--bg-secondary: #252525;
+	--bg-tertiary: #2f2f2f;
+	--accent: #00ff41;
+	--accent-alt: #ff6b35;
+	--text-primary: #e0e0e0;
+	--text-secondary: #888888;
+	--border: #3a3a3a;
+	--card-bg: rgba(28, 28, 28, 0.9);
+	--card-border: rgba(0, 255, 65, 0.2);
+
+	font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
 	line-height: 1.5;
 	font-weight: 400;
 
 	color-scheme: dark;
-	color: rgba(255, 255, 255, 0.95);
+	color: var(--text-primary);
 
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;
@@ -16,8 +28,9 @@ body {
 	margin: 0;
 	min-width: 320px;
 	min-height: 100vh;
-	background: linear-gradient(135deg, #0f0f1a 0%, #1a0a2e 50%, #0d1f2d 100%);
+	background: var(--bg-primary);
 	background-attachment: fixed;
+	transition: background-color 0.3s ease;
 }
 
 #root {
@@ -26,12 +39,12 @@ body {
 
 a {
 	font-weight: 500;
-	color: #05d9e8;
+	color: var(--accent);
 	text-decoration: inherit;
 }
 a:hover {
-	color: #ff2a6d;
-	text-shadow: 0 0 10px rgba(255, 42, 109, 0.5);
+	color: var(--accent-alt);
+	text-shadow: 0 0 10px color-mix(in srgb, var(--accent-alt) 50%, transparent);
 }
 
 h1 {
@@ -52,31 +65,63 @@ button {
 
 button:focus,
 button:focus-visible {
-	outline: 2px solid #05d9e8;
+	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-	width: 8px;
-	height: 8px;
+	width: 6px;
+	height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-	background: #0f0f1a;
+	background: var(--bg-primary);
 }
 
 ::-webkit-scrollbar-thumb {
-	background: linear-gradient(180deg, #ff2a6d, #05d9e8);
-	border-radius: 4px;
+	background: var(--border);
+	border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-	background: linear-gradient(180deg, #ff2a6d, #d300c5);
+	background: var(--accent);
 }
 
 /* Selection styling */
 ::selection {
-	background: rgba(5, 217, 232, 0.3);
+	background: color-mix(in srgb, var(--accent) 30%, transparent);
 	color: #fff;
+}
+
+/* Scanlines effect for Phosphor theme */
+.scanlines::before {
+	content: "";
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	background: repeating-linear-gradient(
+		0deg,
+		rgba(0, 0, 0, 0.15),
+		rgba(0, 0, 0, 0.15) 1px,
+		transparent 1px,
+		transparent 2px
+	);
+	z-index: 9999;
+}
+
+/* CRT flicker for Phosphor theme */
+.scanlines::after {
+	content: "";
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.3) 100%);
+	z-index: 9998;
 }

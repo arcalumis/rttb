@@ -4,9 +4,14 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
 
-// Get encryption key from environment or use a default (change in production!)
+const isProduction = process.env.NODE_ENV === "production";
+
+// Get encryption key from environment - required in production
 function getEncryptionKey(): Buffer {
-	const key = process.env.API_KEY_SECRET || "change-this-in-production-32ch";
+	const key = process.env.ENCRYPTION_KEY || (isProduction ? undefined : "dev-encryption-key-change-in-prod");
+	if (!key) {
+		throw new Error("CRITICAL: ENCRYPTION_KEY environment variable is required in production.");
+	}
 	// Ensure key is exactly 32 bytes for AES-256
 	return crypto.createHash("sha256").update(key).digest();
 }

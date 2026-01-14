@@ -13,8 +13,8 @@ const ASPECT_RATIOS = [
 ];
 
 const RESOLUTIONS = [
-	{ value: "1K", label: "1K" },
 	{ value: "2K", label: "2K" },
+	{ value: "1K", label: "1K" },
 	{ value: "4K", label: "4K" },
 ];
 

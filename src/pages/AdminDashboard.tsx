@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useAdminStats } from "../hooks/useAdmin";
 
-export function AdminDashboard() {
+export default function AdminDashboard() {
 	const { token } = useAuth();
 	const { stats, loading, fetchStats } = useAdminStats(token);
 

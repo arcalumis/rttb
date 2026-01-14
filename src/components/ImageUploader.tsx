@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { API_BASE } from "../config";
 import type { Upload } from "../types";
+import { blobToFile, resizeImageIfNeeded } from "../utils/imageResize";
 import { ImagePicker } from "./ImagePicker";
 
 interface ImageUploaderProps {
@@ -17,13 +18,26 @@ export function ImageUploader({
 	maxImages = 14,
 }: ImageUploaderProps) {
 	const [uploading, setUploading] = useState(false);
+	const [resizing, setResizing] = useState(false);
 	const [dragOver, setDragOver] = useState(false);
 	const [showPicker, setShowPicker] = useState(false);
 
 	const uploadFile = useCallback(
 		async (file: File) => {
+			// Check if resize is needed and resize if necessary
+			setResizing(true);
+			let fileToUpload = file;
+			try {
+				const result = await resizeImageIfNeeded(file);
+				if (result.resized) {
+					fileToUpload = blobToFile(result.blob, file);
+				}
+			} finally {
+				setResizing(false);
+			}
+
 			const formData = new FormData();
-			formData.append("file", file);
+			formData.append("file", fileToUpload);
 
 			const response = await fetch(`${API_BASE}/api/uploads`, {
 				method: "POST",
@@ -117,7 +131,9 @@ export function ImageUploader({
 						disabled={uploading || selectedImages.length >= maxImages}
 					/>
 					<label htmlFor="image-upload" className="cursor-pointer block text-xs">
-						{uploading ? (
+						{resizing ? (
+							<span className="text-gray-400">Resizing...</span>
+						) : uploading ? (
 							<span className="text-gray-400">Uploading...</span>
 						) : (
 							<>

@@ -86,22 +86,29 @@ export async function historyRoutes(fastify: FastifyInstance): Promise<void> {
 				cost?: number;
 				deletedAt?: string;
 				archivedAt?: string;
-			})[] = rows.map((row) => ({
-				id: row.id,
-				prompt: row.prompt,
-				model: row.model,
-				modelVersion: row.model_version || undefined,
-				imagePath: row.image_path,
-				imageUrl: `/images/${row.image_path}`,
-				width: row.width || undefined,
-				height: row.height || undefined,
-				parameters: row.parameters ? JSON.parse(row.parameters) : undefined,
-				createdAt: row.created_at,
-				replicateId: row.replicate_id || undefined,
-				cost: row.cost || 0,
-				deletedAt: row.deleted_at || undefined,
-				archivedAt: row.archived_at || undefined,
-			}));
+			})[] = rows.map((row) => {
+				const params = row.parameters ? JSON.parse(row.parameters) : undefined;
+				// Extract images array from parameters for 4-up grid variations
+				const images = params?.images as { id: string; url: string; path?: string }[] | undefined;
+
+				return {
+					id: row.id,
+					prompt: row.prompt,
+					model: row.model,
+					modelVersion: row.model_version || undefined,
+					imagePath: row.image_path,
+					imageUrl: `/images/${row.image_path}`,
+					width: row.width || undefined,
+					height: row.height || undefined,
+					parameters: params,
+					createdAt: row.created_at,
+					replicateId: row.replicate_id || undefined,
+					cost: row.cost || 0,
+					deletedAt: row.deleted_at || undefined,
+					archivedAt: row.archived_at || undefined,
+					images: images,
+				};
+			});
 
 			// Calculate total cost (includes ALL generations including purged for accurate tracking)
 			const totalCostResult = db

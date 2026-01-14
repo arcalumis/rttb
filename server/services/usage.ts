@@ -7,6 +7,7 @@ interface SubscriptionProduct {
 	description: string | null;
 	monthly_image_limit: number | null;
 	monthly_cost_limit: number | null;
+	daily_image_limit: number | null;
 	bonus_credits: number;
 	price: number;
 	is_active: number;
@@ -29,6 +30,13 @@ interface MonthlyUsage {
 	used_own_key: number;
 }
 
+interface DailyUsage {
+	id: string;
+	user_id: string;
+	date: string;
+	image_count: number;
+}
+
 interface CreditRow {
 	total: number;
 }
@@ -42,9 +50,13 @@ export interface UsageLimitResult {
 		totalCost: number;
 		usedOwnKey: number;
 	};
+	dailyUsage?: {
+		imageCount: number;
+	};
 	limits?: {
 		monthlyImageLimit: number | null;
 		monthlyCostLimit: number | null;
+		dailyImageLimit: number | null;
 	};
 	availableCredits?: number;
 }
@@ -55,6 +67,51 @@ export interface UsageLimitResult {
 export function getCurrentYearMonth(): string {
 	const now = new Date();
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Get current UTC date string (e.g., "2025-01-13")
+ */
+export function getCurrentUTCDate(): string {
+	const now = new Date();
+	return now.toISOString().split("T")[0];
+}
+
+/**
+ * Get user's daily usage for a specific date (defaults to today UTC)
+ */
+export function getDailyUsage(userId: string, date?: string): DailyUsage | null {
+	const db = getDb();
+	const targetDate = date || getCurrentUTCDate();
+
+	const usage = db
+		.prepare("SELECT * FROM usage_daily WHERE user_id = ? AND date = ?")
+		.get(userId, targetDate) as DailyUsage | undefined;
+
+	return usage || null;
+}
+
+/**
+ * Record daily usage after a generation
+ */
+export function recordDailyUsage(userId: string): void {
+	const db = getDb();
+	const date = getCurrentUTCDate();
+
+	const existing = db
+		.prepare("SELECT id FROM usage_daily WHERE user_id = ? AND date = ?")
+		.get(userId, date) as { id: string } | undefined;
+
+	if (existing) {
+		db.prepare(
+			"UPDATE usage_daily SET image_count = image_count + 1 WHERE id = ?",
+		).run(existing.id);
+	} else {
+		const id = crypto.randomUUID();
+		db.prepare(
+			"INSERT INTO usage_daily (id, user_id, date, image_count) VALUES (?, ?, ?, 1)",
+		).run(id, userId, date);
+	}
 }
 
 /**
@@ -120,6 +177,7 @@ export function getAvailableCredits(userId: string): number {
 export function canUserGenerate(userId: string): UsageLimitResult {
 	const { subscription, product } = getUserSubscription(userId);
 	const usage = getMonthlyUsage(userId);
+	const dailyUsageRecord = getDailyUsage(userId);
 	const availableCredits = getAvailableCredits(userId);
 
 	// If no subscription, check for credits only
@@ -143,12 +201,37 @@ export function canUserGenerate(userId: string): UsageLimitResult {
 		usedOwnKey: usage?.used_own_key || 0,
 	};
 
+	const currentDailyUsage = {
+		imageCount: dailyUsageRecord?.image_count || 0,
+	};
+
 	const limits = {
 		monthlyImageLimit: product.monthly_image_limit,
 		monthlyCostLimit: product.monthly_cost_limit,
+		dailyImageLimit: product.daily_image_limit,
 	};
 
-	// Check image limit
+	// Check daily limit first (resets more frequently)
+	if (
+		product.daily_image_limit !== null &&
+		currentDailyUsage.imageCount >= product.daily_image_limit
+	) {
+		// Check for bonus credits to override daily limit
+		if (availableCredits <= 0) {
+			return {
+				allowed: false,
+				reason: `Daily limit (${product.daily_image_limit}) reached. Come back tomorrow or upgrade your plan.`,
+				subscription: product,
+				usage: currentUsage,
+				dailyUsage: currentDailyUsage,
+				limits,
+				availableCredits: 0,
+			};
+		}
+		// Has credits, can proceed (credits will be deducted)
+	}
+
+	// Check monthly image limit
 	if (
 		product.monthly_image_limit !== null &&
 		currentUsage.imageCount >= product.monthly_image_limit
@@ -160,6 +243,7 @@ export function canUserGenerate(userId: string): UsageLimitResult {
 				reason: `Monthly image limit (${product.monthly_image_limit}) reached. Upgrade your plan or wait for next month.`,
 				subscription: product,
 				usage: currentUsage,
+				dailyUsage: currentDailyUsage,
 				limits,
 				availableCredits: 0,
 			};
@@ -167,13 +251,14 @@ export function canUserGenerate(userId: string): UsageLimitResult {
 		// Has credits, can proceed (credits will be deducted)
 	}
 
-	// Check cost limit
+	// Check cost limit (hard cap, no credit override)
 	if (product.monthly_cost_limit !== null && currentUsage.totalCost >= product.monthly_cost_limit) {
 		return {
 			allowed: false,
 			reason: `Monthly cost limit ($${product.monthly_cost_limit.toFixed(2)}) reached. Upgrade your plan or wait for next month.`,
 			subscription: product,
 			usage: currentUsage,
+			dailyUsage: currentDailyUsage,
 			limits,
 			availableCredits,
 		};
@@ -183,6 +268,7 @@ export function canUserGenerate(userId: string): UsageLimitResult {
 		allowed: true,
 		subscription: product,
 		usage: currentUsage,
+		dailyUsage: currentDailyUsage,
 		limits,
 		availableCredits,
 	};
@@ -195,13 +281,12 @@ export function recordUsage(userId: string, cost: number, usedOwnKey: boolean): 
 	const db = getDb();
 	const yearMonth = getCurrentYearMonth();
 
-	// Check if record exists
+	// Record monthly usage
 	const existing = db
 		.prepare("SELECT id FROM usage_monthly WHERE user_id = ? AND year_month = ?")
 		.get(userId, yearMonth) as { id: string } | undefined;
 
 	if (existing) {
-		// Update existing record
 		db.prepare(
 			`UPDATE usage_monthly
 			SET image_count = image_count + 1,
@@ -210,13 +295,15 @@ export function recordUsage(userId: string, cost: number, usedOwnKey: boolean): 
 			WHERE id = ?`,
 		).run(cost, usedOwnKey ? 1 : 0, existing.id);
 	} else {
-		// Create new record
 		const id = crypto.randomUUID();
 		db.prepare(
 			`INSERT INTO usage_monthly (id, user_id, year_month, image_count, total_cost, used_own_key)
 			VALUES (?, ?, ?, 1, ?, ?)`,
 		).run(id, userId, yearMonth, cost, usedOwnKey ? 1 : 0);
 	}
+
+	// Record daily usage
+	recordDailyUsage(userId);
 }
 
 /**

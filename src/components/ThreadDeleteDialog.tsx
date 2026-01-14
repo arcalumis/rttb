@@ -85,7 +85,7 @@ export function ThreadDeleteDialog({
 				</div>
 
 				<div className="space-y-2">
-					<label className="flex items-start gap-3 p-2 rounded border border-cyan-500/20 hover:border-cyan-500/40 cursor-pointer transition-colors">
+					<label className="flex items-start gap-3 p-3 rounded border border-cyan-500/20 hover:border-cyan-500/40 cursor-pointer transition-colors">
 						<input
 							type="radio"
 							name="deleteOption"
@@ -94,14 +94,14 @@ export function ThreadDeleteDialog({
 							className="mt-0.5 accent-cyan-500"
 						/>
 						<div>
-							<p className="text-sm font-medium">Archive thread</p>
-							<p className="text-xs text-[var(--text-secondary)]">
-								Keep all photos, thread moves to archived
+							<p className="text-sm font-medium">Archive this thread</p>
+							<p className="text-xs text-[var(--text-secondary)] mt-0.5">
+								Keep your {photoCount} image{photoCount !== 1 ? "s" : ""}, thread moves to archived
 							</p>
 						</div>
 					</label>
 
-					<label className="flex items-start gap-3 p-2 rounded border border-red-500/20 hover:border-red-500/40 cursor-pointer transition-colors">
+					<label className="flex items-start gap-3 p-3 rounded border border-red-500/20 hover:border-red-500/40 cursor-pointer transition-colors">
 						<input
 							type="radio"
 							name="deleteOption"
@@ -111,23 +111,14 @@ export function ThreadDeleteDialog({
 						/>
 						<div>
 							<p className="text-sm font-medium text-red-400">
-								Delete thread and photos
+								Delete thread and all images
 							</p>
-							<p className="text-xs text-[var(--text-secondary)]">
-								Permanently remove thread and all {photoCount} photo
-								{photoCount !== 1 ? "s" : ""}
+							<p className="text-xs text-red-400/70 mt-0.5">
+								Cannot be undone
 							</p>
 						</div>
 					</label>
 				</div>
-
-				{deletePhotos && (
-					<div className="p-2 rounded bg-red-500/10 border border-red-500/30">
-						<p className="text-xs text-red-400">
-							This action cannot be undone. All photos will be permanently deleted.
-						</p>
-					</div>
-				)}
 			</div>
 		</Modal>
 	);

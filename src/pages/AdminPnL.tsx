@@ -29,7 +29,7 @@ interface PnLData {
 
 type PeriodOption = "mtd" | "qtd" | "ytd" | "last30" | "last90";
 
-export function AdminPnL() {
+export default function AdminPnL() {
 	const { token } = useAuth();
 	const [period, setPeriod] = useState<PeriodOption>("mtd");
 	const [pnl, setPnl] = useState<PnLData | null>(null);

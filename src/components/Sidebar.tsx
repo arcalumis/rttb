@@ -61,6 +61,7 @@ export function Sidebar({
 	const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
 	const [contextMenuThread, setContextMenuThread] = useState<string | null>(null);
+	const [manageMode, setManageMode] = useState(false);
 
 	// Filter and group threads by date
 	const { filteredThreads, groupedThreads } = useMemo(() => {
@@ -218,8 +219,8 @@ export function Sidebar({
 				</div>
 			</div>
 
-			{/* Search */}
-			<div className="px-3 pb-2">
+			{/* Search and Manage */}
+			<div className="px-3 pb-2 space-y-2">
 				<div className="relative">
 					<input
 						type="text"
@@ -253,6 +254,19 @@ export function Sidebar({
 						</button>
 					)}
 				</div>
+				{filteredThreads.length > 0 && (
+					<button
+						type="button"
+						onClick={() => setManageMode(!manageMode)}
+						className={`w-full py-1.5 px-3 text-xs rounded-lg transition-colors ${
+							manageMode
+								? "bg-[var(--accent)] text-[var(--bg-primary)] font-medium"
+								: "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
+						}`}
+					>
+						{manageMode ? "Done" : "Manage Threads"}
+					</button>
+				)}
 			</div>
 
 			{/* Thread List */}
@@ -271,7 +285,25 @@ export function Sidebar({
 						<div key={group}>
 							<div className="date-group">{group}</div>
 							{groupThreads.map((thread) => (
-								<div key={thread.id} className="relative">
+								<div key={thread.id} className="relative flex items-center gap-1">
+									{/* Trash icon in manage mode */}
+									{manageMode && onDeleteThread && (
+										<button
+											type="button"
+											onClick={() => onDeleteThread(thread)}
+											className="flex-shrink-0 p-1.5 text-[var(--accent-alt)] hover:bg-[var(--accent-alt)]/20 rounded transition-colors"
+											title="Delete thread"
+										>
+											<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path
+													strokeLinecap="round"
+													strokeLinejoin="round"
+													strokeWidth={2}
+													d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+												/>
+											</svg>
+										</button>
+									)}
 									{editingThreadId === thread.id ? (
 										<input
 											type="text"
@@ -285,16 +317,16 @@ export function Sidebar({
 									) : (
 										<button
 											type="button"
-											onClick={() => onSelectThread(thread)}
+											onClick={() => !manageMode && onSelectThread(thread)}
 											onContextMenu={(e) => {
 												e.preventDefault();
 												setContextMenuThread(
 													contextMenuThread === thread.id ? null : thread.id,
 												);
 											}}
-											className={`sidebar-item w-full text-left group ${
+											className={`sidebar-item flex-1 text-left group ${
 												selectedThreadId === thread.id ? "active" : ""
-											}`}
+											} ${manageMode ? "cursor-default" : ""}`}
 											title={thread.title}
 										>
 											<div className="flex items-center justify-between">

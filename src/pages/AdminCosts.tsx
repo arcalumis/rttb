@@ -21,7 +21,7 @@ interface CostSummary {
 
 type PeriodOption = "mtd" | "qtd" | "ytd" | "last30" | "last90";
 
-export function AdminCosts() {
+export default function AdminCosts() {
 	const { token } = useAuth();
 	const [period, setPeriod] = useState<PeriodOption>("mtd");
 	const [byModel, setByModel] = useState<ModelCost[]>([]);

@@ -1,3 +1,9 @@
+export interface GenerationImage {
+	id: string;
+	url: string;
+	path?: string;
+}
+
 export interface Generation {
 	id: string;
 	prompt: string;
@@ -13,6 +19,7 @@ export interface Generation {
 	cost?: number;
 	deletedAt?: string;
 	archivedAt?: string;
+	images?: GenerationImage[]; // For multi-image variations (4-up grid)
 }
 
 export interface Model {
@@ -36,6 +43,7 @@ export interface GenerateRequest {
 	aspectRatio?: string;
 	resolution?: string;
 	outputFormat?: string;
+	seed?: number;
 }
 
 export interface GenerateResponse {
@@ -44,6 +52,7 @@ export interface GenerateResponse {
 	images?: { id: string; url: string; cost?: number }[];
 	cost?: number;
 	error?: string;
+	threadId?: string;
 }
 
 export interface HistoryResponse {
@@ -91,6 +100,7 @@ export interface SubscriptionProduct {
 	description: string | null;
 	monthlyImageLimit: number | null;
 	monthlyCostLimit: number | null;
+	dailyImageLimit: number | null;
 	bonusCredits: number;
 	price: number;
 	isActive: boolean;
@@ -217,4 +227,22 @@ export interface QueuedGeneration {
 	result?: Generation;
 	startedAt?: string;
 	estimatedDuration?: number;
+	threadId?: string;
+}
+
+// Thread types
+export interface Thread {
+	id: string;
+	userId: string;
+	title: string;
+	createdAt: string;
+	updatedAt: string;
+	archivedAt?: string;
+	generationCount?: number;
+	lastGenerationAt?: string;
+	generations?: Generation[];
+}
+
+export interface ThreadsResponse {
+	threads: Thread[];
 }

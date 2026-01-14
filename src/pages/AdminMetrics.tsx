@@ -47,7 +47,7 @@ interface ComparisonData {
 
 type PeriodOption = "mtd" | "qtd" | "ytd" | "last30" | "last90";
 
-export function AdminMetrics() {
+export default function AdminMetrics() {
 	const { token } = useAuth();
 	const [period, setPeriod] = useState<PeriodOption>("mtd");
 	const [mrrHistory, setMrrHistory] = useState<MRRHistory[]>([]);

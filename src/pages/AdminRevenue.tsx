@@ -19,7 +19,7 @@ interface TopCustomer {
 
 type PeriodOption = "mtd" | "qtd" | "ytd" | "last30" | "last90";
 
-export function AdminRevenue() {
+export default function AdminRevenue() {
 	const { token } = useAuth();
 	const [period, setPeriod] = useState<PeriodOption>("mtd");
 	const [byTier, setByTier] = useState<TierRevenue[]>([]);

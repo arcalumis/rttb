@@ -7,6 +7,35 @@ import { authMiddleware } from "../middleware/auth";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
+// Allowed image extensions and MIME types
+const ALLOWED_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+const ALLOWED_MIME_TYPES = new Set([
+	"image/jpeg",
+	"image/png",
+	"image/gif",
+	"image/webp",
+	"image/avif",
+]);
+
+// Magic bytes for image validation
+const IMAGE_SIGNATURES: { [key: string]: number[] } = {
+	jpeg: [0xff, 0xd8, 0xff],
+	png: [0x89, 0x50, 0x4e, 0x47],
+	gif: [0x47, 0x49, 0x46],
+	webp: [0x52, 0x49, 0x46, 0x46], // RIFF header (WebP starts with RIFF)
+};
+
+function isValidImageContent(buffer: Buffer): boolean {
+	if (buffer.length < 4) return false;
+
+	for (const sig of Object.values(IMAGE_SIGNATURES)) {
+		if (sig.every((byte, i) => buffer[i] === byte)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 interface UploadRow {
 	id: string;
 	user_id: string;
@@ -36,7 +65,7 @@ export async function uploadsRoutes(fastify: FastifyInstance): Promise<void> {
 		fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 	}
 
-	// Upload image
+	// Upload image (with strict validation)
 	fastify.post("/api/uploads", { preHandler: authMiddleware }, async (request, reply) => {
 		const data = await request.file();
 
@@ -44,9 +73,32 @@ export async function uploadsRoutes(fastify: FastifyInstance): Promise<void> {
 			return reply.status(400).send({ error: "No file uploaded" });
 		}
 
+		// Validate MIME type
+		if (!ALLOWED_MIME_TYPES.has(data.mimetype)) {
+			return reply.status(400).send({
+				error: "Invalid file type. Only JPEG, PNG, GIF, WebP, and AVIF images are allowed.",
+			});
+		}
+
+		// Validate extension
+		const ext = path.extname(data.filename).toLowerCase();
+		if (!ALLOWED_EXTENSIONS.has(ext)) {
+			return reply.status(400).send({
+				error: "Invalid file extension. Only .jpg, .jpeg, .png, .gif, .webp, and .avif are allowed.",
+			});
+		}
+
 		const buffer = await data.toBuffer();
-		const ext = path.extname(data.filename) || ".png";
+
+		// Validate file content (magic bytes)
+		if (!isValidImageContent(buffer)) {
+			return reply.status(400).send({
+				error: "Invalid file content. The file does not appear to be a valid image.",
+			});
+		}
+
 		const id = crypto.randomUUID();
+		// Use validated extension (normalized to lowercase)
 		const filename = `${id}${ext}`;
 		const filePath = path.join(UPLOADS_DIR, filename);
 

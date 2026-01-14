@@ -11,6 +11,7 @@ interface ProductFormData {
 	description: string;
 	monthlyImageLimit: string;
 	monthlyCostLimit: string;
+	dailyImageLimit: string;
 	bonusCredits: string;
 	price: string;
 }
@@ -20,11 +21,12 @@ const emptyForm: ProductFormData = {
 	description: "",
 	monthlyImageLimit: "",
 	monthlyCostLimit: "",
+	dailyImageLimit: "",
 	bonusCredits: "0",
 	price: "0",
 };
 
-export function AdminProducts() {
+export default function AdminProducts() {
 	const { token } = useAuth();
 	const { products, loading, fetchProducts, createProduct, updateProduct, deleteProduct } =
 		useAdminProducts(token);
@@ -48,6 +50,9 @@ export function AdminProducts() {
 				: undefined,
 			monthlyCostLimit: formData.monthlyCostLimit
 				? Number.parseFloat(formData.monthlyCostLimit)
+				: undefined,
+			dailyImageLimit: formData.dailyImageLimit
+				? Number.parseInt(formData.dailyImageLimit, 10)
 				: undefined,
 			bonusCredits: Number.parseInt(formData.bonusCredits || "0", 10),
 			price: Number.parseFloat(formData.price || "0"),
@@ -78,6 +83,7 @@ export function AdminProducts() {
 			description: product.description || "",
 			monthlyImageLimit: product.monthlyImageLimit?.toString() || "",
 			monthlyCostLimit: product.monthlyCostLimit?.toString() || "",
+			dailyImageLimit: product.dailyImageLimit?.toString() || "",
 			bonusCredits: product.bonusCredits.toString(),
 			price: product.price.toString(),
 		});
@@ -147,6 +153,10 @@ export function AdminProducts() {
 							)}
 
 							<div className="space-y-1 mb-3 text-xs">
+								<div className="flex justify-between">
+									<span className="text-gray-500">Images/day</span>
+									<span className="text-cyan-400">{product.dailyImageLimit ?? "∞"}</span>
+								</div>
 								<div className="flex justify-between">
 									<span className="text-gray-500">Images/mo</span>
 									<span className="text-cyan-400">{product.monthlyImageLimit ?? "∞"}</span>
@@ -231,7 +241,18 @@ export function AdminProducts() {
 						/>
 					</div>
 
-					<div className="grid grid-cols-2 gap-2">
+					<div className="grid grid-cols-3 gap-2">
+						<div>
+							<label htmlFor="product-daily-limit" className="block text-xs font-medium text-gray-400 mb-1">Images/day</label>
+							<input
+								id="product-daily-limit"
+								type="number"
+								value={formData.dailyImageLimit}
+								onChange={(e) => setFormData({ ...formData, dailyImageLimit: e.target.value })}
+								placeholder="∞"
+								className="cyber-input w-full px-2 py-1.5 rounded text-sm"
+							/>
+						</div>
 						<div>
 							<label htmlFor="product-image-limit" className="block text-xs font-medium text-gray-400 mb-1">Images/mo</label>
 							<input

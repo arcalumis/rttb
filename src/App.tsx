@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ChatFeed } from "./components/ChatFeed";
 import { CreationPanel, type CreationOptions } from "./components/CreationPanel";
@@ -6,7 +6,6 @@ import { GenerationStatus } from "./components/GenerationStatus";
 import { ImageGallery } from "./components/ImageGallery";
 import { LoginForm } from "./components/LoginForm";
 import { MagicLinkVerify } from "./components/MagicLinkVerify";
-import { RetroProgressBar } from "./components/RetroProgressBar";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { Sidebar } from "./components/Sidebar";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
@@ -15,16 +14,28 @@ import { UserSettings } from "./components/UserSettings";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { useEnhancePrompt, useGenerate, useHistory, useModels, useThreads, useUploads } from "./hooks/useApi";
-import { AdminCosts } from "./pages/AdminCosts";
-import { AdminDashboard } from "./pages/AdminDashboard";
-import { AdminFinancials } from "./pages/AdminFinancials";
 import { AdminLayout } from "./pages/AdminLayout";
-import { AdminMetrics } from "./pages/AdminMetrics";
-import { AdminPnL } from "./pages/AdminPnL";
-import { AdminProducts } from "./pages/AdminProducts";
-import { AdminRevenue } from "./pages/AdminRevenue";
-import { AdminUsers } from "./pages/AdminUsers";
 import { Billing } from "./pages/Billing";
+
+// Lazy load admin pages - these are only loaded when admin navigates to them
+const AdminCosts = lazy(() => import("./pages/AdminCosts"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminFinancials = lazy(() => import("./pages/AdminFinancials"));
+const AdminMetrics = lazy(() => import("./pages/AdminMetrics"));
+const AdminPnL = lazy(() => import("./pages/AdminPnL"));
+const AdminProducts = lazy(() => import("./pages/AdminProducts"));
+const AdminRevenue = lazy(() => import("./pages/AdminRevenue"));
+const AdminUsers = lazy(() => import("./pages/AdminUsers"));
+
+// Loading fallback for lazy-loaded admin pages
+function AdminLoading() {
+	return (
+		<div className="flex items-center justify-center p-8">
+			<div className="text-[var(--text-secondary)] mono">Loading<span className="cursor-blink">_</span></div>
+		</div>
+	);
+}
+
 import type { Generation, QueuedGeneration, Thread } from "./types";
 import "./App.css";
 
@@ -87,6 +98,11 @@ function MainApp() {
 	const displayGenerations = activeThread?.generations || [];
 	const showWelcome = !threadsLoading && !activeThread && threads.length === 0 && generationQueue.length === 0;
 
+	// Helper to refresh history with current filters
+	const refreshHistory = useCallback(() => {
+		fetchHistory(1, 20, showTrash, showArchived);
+	}, [fetchHistory, showTrash, showArchived]);
+
 	// Process a single queued generation
 	const processGeneration = useCallback(
 		async (queueItem: QueuedGeneration, request: Parameters<typeof generate>[0]) => {
@@ -94,7 +110,8 @@ function MainApp() {
 			processingRef.current.add(queueItem.id);
 
 			const modelInfo = models.find((m) => m.id === queueItem.model);
-			const estimatedDuration = modelInfo?.avgGenerationTime || 30;
+			// Add 3 seconds buffer to always stay ahead of actual generation time
+			const estimatedDuration = (modelInfo?.avgGenerationTime || 30) + 3;
 
 			setGenerationQueue((prev) =>
 				prev.map((item) =>
@@ -119,6 +136,8 @@ function MainApp() {
 					if (result.threadId) {
 						fetchThread(result.threadId);
 					}
+					// Refresh gallery history
+					refreshHistory();
 				} else {
 					setGenerationQueue((prev) =>
 						prev.map((item) =>
@@ -138,7 +157,7 @@ function MainApp() {
 				processingRef.current.delete(queueItem.id);
 			}
 		},
-		[generate, fetchThreads, fetchThread, models],
+		[generate, fetchThreads, fetchThread, refreshHistory, models],
 	);
 
 	const handleAddToInputs = useCallback(
@@ -159,10 +178,10 @@ function MainApp() {
 	useEffect(() => {
 		if (token) {
 			fetchThreads();
-			fetchHistory(1, 20, showTrash, showArchived);
+			refreshHistory();
 			fetchUploads(showArchived);
 		}
-	}, [token, fetchThreads, fetchHistory, fetchUploads, showTrash, showArchived]);
+	}, [token, fetchThreads, refreshHistory, fetchUploads, showArchived]);
 
 	useEffect(() => {
 		if (!supportsImageInput) {
@@ -178,6 +197,7 @@ function MainApp() {
 	const handleLoadMore = useCallback(() => {
 		fetchMoreHistory(20, showTrash, showArchived);
 	}, [fetchMoreHistory, showTrash, showArchived]);
+
 
 	if (authLoading) {
 		return (
@@ -308,7 +328,7 @@ function MainApp() {
 	const handleTrash = async (id: string) => {
 		const success = await trashGeneration(id);
 		if (success) {
-			fetchHistory(1, 20, showTrash, showArchived);
+			refreshHistory();
 			if (activeThread) {
 				fetchThread(activeThread.id);
 			}
@@ -318,28 +338,28 @@ function MainApp() {
 	const handleRestore = async (id: string) => {
 		const success = await restoreGeneration(id);
 		if (success) {
-			fetchHistory(1, 20, showTrash, showArchived);
+			refreshHistory();
 		}
 	};
 
 	const handleDelete = async (id: string) => {
 		const success = await deleteGeneration(id);
 		if (success) {
-			fetchHistory(1, 20, showTrash, showArchived);
+			refreshHistory();
 		}
 	};
 
 	const handleArchive = async (id: string) => {
 		const success = await archiveGeneration(id);
 		if (success) {
-			fetchHistory(1, 20, showTrash, showArchived);
+			refreshHistory();
 		}
 	};
 
 	const handleUnarchive = async (id: string) => {
 		const success = await unarchiveGeneration(id);
 		if (success) {
-			fetchHistory(1, 20, showTrash, showArchived);
+			refreshHistory();
 		}
 	};
 
@@ -462,8 +482,8 @@ function MainApp() {
 									onPromptClick={handlePromptClick}
 									onCategoryClick={handleCategoryClick}
 								/>
-							) : !activeThread && threads.length > 0 ? (
-								// No thread selected but threads exist - show prompt to select or create
+							) : !activeThread && threads.length > 0 && !generationQueue.some((q) => !q.threadId) ? (
+								// No thread selected but threads exist and no pending new generations - show prompt to select or create
 								<div className="flex flex-col items-center justify-center min-h-[60vh]">
 									<h2 className="welcome-heading text-2xl text-[var(--text-primary)] mb-2">
 										Select a thread or start a new one
@@ -496,45 +516,6 @@ function MainApp() {
 										hasMore={false}
 										loading={threadsLoading}
 									/>
-
-									{/* Queued Generation Status */}
-									{generationQueue.filter((q) => !activeThread || q.threadId === activeThread.id).length > 0 && (
-										<div className="space-y-3 mt-4">
-											{generationQueue
-												.filter((q) => !activeThread || q.threadId === activeThread.id)
-												.map((item) => (
-													<div key={item.id} className="cyber-card rounded-lg p-4">
-														<p className="text-sm text-[var(--text-primary)] mb-2">{item.prompt}</p>
-														{item.status === "generating" && item.startedAt && (
-															<RetroProgressBar
-																startedAt={item.startedAt}
-																estimatedDuration={item.estimatedDuration || 30}
-																status={item.status}
-															/>
-														)}
-														{item.status === "queued" && (
-															<div className="text-xs text-[var(--text-secondary)] mono">
-																Queued<span className="cursor-blink">_</span>
-															</div>
-														)}
-														{item.status === "failed" && (
-															<div className="flex items-center justify-between">
-																<span className="text-xs text-[var(--accent-alt)]">
-																	Failed: {item.error}
-																</span>
-																<button
-																	type="button"
-																	onClick={() => dismissQueueItem(item.id)}
-																	className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-																>
-																	Dismiss
-																</button>
-															</div>
-														)}
-													</div>
-												))}
-										</div>
-									)}
 								</>
 							)}
 						</div>
@@ -669,15 +650,15 @@ function AppRoutes() {
 					</AdminRoute>
 				}
 			>
-				<Route index element={<AdminDashboard />} />
-				<Route path="users" element={<AdminUsers />} />
-				<Route path="users/:id" element={<AdminUsers />} />
-				<Route path="products" element={<AdminProducts />} />
-				<Route path="financials" element={<AdminFinancials />} />
-				<Route path="financials/revenue" element={<AdminRevenue />} />
-				<Route path="financials/costs" element={<AdminCosts />} />
-				<Route path="financials/metrics" element={<AdminMetrics />} />
-				<Route path="financials/pnl" element={<AdminPnL />} />
+				<Route index element={<Suspense fallback={<AdminLoading />}><AdminDashboard /></Suspense>} />
+				<Route path="users" element={<Suspense fallback={<AdminLoading />}><AdminUsers /></Suspense>} />
+				<Route path="users/:id" element={<Suspense fallback={<AdminLoading />}><AdminUsers /></Suspense>} />
+				<Route path="products" element={<Suspense fallback={<AdminLoading />}><AdminProducts /></Suspense>} />
+				<Route path="financials" element={<Suspense fallback={<AdminLoading />}><AdminFinancials /></Suspense>} />
+				<Route path="financials/revenue" element={<Suspense fallback={<AdminLoading />}><AdminRevenue /></Suspense>} />
+				<Route path="financials/costs" element={<Suspense fallback={<AdminLoading />}><AdminCosts /></Suspense>} />
+				<Route path="financials/metrics" element={<Suspense fallback={<AdminLoading />}><AdminMetrics /></Suspense>} />
+				<Route path="financials/pnl" element={<Suspense fallback={<AdminLoading />}><AdminPnL /></Suspense>} />
 			</Route>
 		</Routes>
 	);

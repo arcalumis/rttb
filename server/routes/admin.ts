@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { getDb } from "../db";
 import { authMiddleware } from "../middleware/auth";
 import { sendWelcomeEmail } from "../services/email";
+import { calculateGenerationCost } from "../services/replicate";
 import { addCredits, assignSubscription, getCurrentYearMonth } from "../services/usage";
 
 interface UserRow {
@@ -21,6 +22,7 @@ interface ProductRow {
 	description: string | null;
 	monthly_image_limit: number | null;
 	monthly_cost_limit: number | null;
+	daily_image_limit: number | null;
 	bonus_credits: number;
 	price: number;
 	is_active: number;
@@ -49,6 +51,22 @@ interface StatsRow {
 	total_users: number;
 	total_generations: number;
 	total_cost: number;
+}
+
+interface ModelCostRow {
+	model: string;
+	count: number;
+	total_cost: number;
+	avg_predict_time: number | null;
+}
+
+interface GenerationRow {
+	id: string;
+	model: string;
+	width: number | null;
+	height: number | null;
+	parameters: string | null;
+	cost: number;
 }
 
 // Admin-only middleware
@@ -89,6 +107,21 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 			)
 			.get(yearMonth) as { image_count: number; total_cost: number };
 
+		// Cost breakdown by model
+		const costByModel = db
+			.prepare(
+				`SELECT
+					model,
+					COUNT(*) as count,
+					COALESCE(SUM(cost), 0) as total_cost,
+					AVG(predict_time) as avg_predict_time
+				FROM generations
+				WHERE deleted_at IS NULL
+				GROUP BY model
+				ORDER BY total_cost DESC`,
+			)
+			.all() as ModelCostRow[];
+
 		const recentUsers = db
 			.prepare(
 				`SELECT id, username, created_at
@@ -104,6 +137,13 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 				imageCount: monthlyStats.image_count,
 				totalCost: monthlyStats.total_cost,
 			},
+			costByModel: costByModel.map((row) => ({
+				model: row.model,
+				count: row.count,
+				totalCost: row.total_cost,
+				avgPredictTime: row.avg_predict_time,
+				avgCostPerImage: row.count > 0 ? row.total_cost / row.count : 0,
+			})),
 			recentUsers,
 		};
 	});
@@ -111,11 +151,11 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 	// GET /api/admin/users - List all users
 	fastify.get<{ Querystring: { search?: string; page?: string; limit?: string } }>(
 		"/api/admin/users",
-		async (request) => {
+		async (request, reply) => {
 			const db = getDb();
-			const search = request.query.search || "";
-			const page = Number.parseInt(request.query.page || "1", 10);
-			const limit = Number.parseInt(request.query.limit || "20", 10);
+			const search = (request.query.search || "").slice(0, 100); // Max 100 chars
+			const page = Math.max(1, Number.parseInt(request.query.page || "1", 10) || 1);
+			const limit = Math.min(100, Math.max(1, Number.parseInt(request.query.limit || "20", 10) || 20));
 			const offset = (page - 1) * limit;
 			const yearMonth = getCurrentYearMonth();
 
@@ -470,6 +510,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 				description: product.description,
 				monthlyImageLimit: product.monthly_image_limit,
 				monthlyCostLimit: product.monthly_cost_limit,
+				dailyImageLimit: product.daily_image_limit,
 				bonusCredits: product.bonus_credits,
 				price: product.price,
 				isActive: product.is_active === 1,
@@ -488,12 +529,13 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 			description?: string;
 			monthlyImageLimit?: number;
 			monthlyCostLimit?: number;
+			dailyImageLimit?: number;
 			bonusCredits?: number;
 			price?: number;
 		};
 	}>("/api/admin/products", async (request, reply) => {
 		const db = getDb();
-		const { name, description, monthlyImageLimit, monthlyCostLimit, bonusCredits, price } =
+		const { name, description, monthlyImageLimit, monthlyCostLimit, dailyImageLimit, bonusCredits, price } =
 			request.body;
 
 		if (!name) {
@@ -504,14 +546,15 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 
 		db.prepare(
 			`INSERT INTO subscription_products
-			(id, name, description, monthly_image_limit, monthly_cost_limit, bonus_credits, price)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			(id, name, description, monthly_image_limit, monthly_cost_limit, daily_image_limit, bonus_credits, price)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		).run(
 			id,
 			name,
 			description || null,
 			monthlyImageLimit ?? null,
 			monthlyCostLimit ?? null,
+			dailyImageLimit ?? null,
 			bonusCredits ?? 0,
 			price ?? 0,
 		);
@@ -522,6 +565,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 			description: description || null,
 			monthlyImageLimit: monthlyImageLimit ?? null,
 			monthlyCostLimit: monthlyCostLimit ?? null,
+			dailyImageLimit: dailyImageLimit ?? null,
 			bonusCredits: bonusCredits ?? 0,
 			price: price ?? 0,
 			isActive: true,
@@ -536,6 +580,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 			description?: string;
 			monthlyImageLimit?: number | null;
 			monthlyCostLimit?: number | null;
+			dailyImageLimit?: number | null;
 			bonusCredits?: number;
 			price?: number;
 			isActive?: boolean;
@@ -548,6 +593,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 			description,
 			monthlyImageLimit,
 			monthlyCostLimit,
+			dailyImageLimit,
 			bonusCredits,
 			price,
 			isActive,
@@ -576,6 +622,10 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 		if (monthlyCostLimit !== undefined) {
 			updates.push("monthly_cost_limit = ?");
 			params.push(monthlyCostLimit);
+		}
+		if (dailyImageLimit !== undefined) {
+			updates.push("daily_image_limit = ?");
+			params.push(dailyImageLimit);
 		}
 		if (bonusCredits !== undefined) {
 			updates.push("bonus_credits = ?");
@@ -614,5 +664,141 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 		db.prepare("UPDATE subscription_products SET is_active = 0 WHERE id = ?").run(id);
 
 		return { success: true };
+	});
+
+	// POST /api/admin/costs/recalculate - Recalculate costs for historical generations
+	fastify.post<{ Body: { dryRun?: boolean } }>(
+		"/api/admin/costs/recalculate",
+		async (request, reply) => {
+			const db = getDb();
+			const dryRun = request.body?.dryRun ?? true;
+
+			// Get all generations
+			const generations = db
+				.prepare(
+					`SELECT id, model, width, height, parameters, cost
+					FROM generations
+					WHERE deleted_at IS NULL`,
+				)
+				.all() as GenerationRow[];
+
+			let oldTotalCost = 0;
+			let newTotalCost = 0;
+			const updates: { id: string; model: string; oldCost: number; newCost: number }[] = [];
+
+			for (const gen of generations) {
+				oldTotalCost += gen.cost || 0;
+
+				// Parse parameters to get resolution if available
+				let resolution: string | undefined;
+				if (gen.parameters) {
+					try {
+						const params = JSON.parse(gen.parameters);
+						resolution = params.resolution;
+					} catch {
+						// Ignore parse errors
+					}
+				}
+
+				const newCost = calculateGenerationCost(gen.model, {
+					numOutputs: 1,
+					resolution,
+					width: gen.width || undefined,
+					height: gen.height || undefined,
+				});
+
+				newTotalCost += newCost;
+
+				if (Math.abs((gen.cost || 0) - newCost) > 0.0001) {
+					updates.push({
+						id: gen.id,
+						model: gen.model,
+						oldCost: gen.cost || 0,
+						newCost,
+					});
+				}
+			}
+
+			// Apply updates if not dry run
+			if (!dryRun && updates.length > 0) {
+				const updateStmt = db.prepare("UPDATE generations SET cost = ? WHERE id = ?");
+				for (const update of updates) {
+					updateStmt.run(update.newCost, update.id);
+				}
+
+				// Recalculate usage_monthly totals
+				const monthlyRecalc = db.prepare(`
+					UPDATE usage_monthly
+					SET total_cost = (
+						SELECT COALESCE(SUM(g.cost), 0)
+						FROM generations g
+						WHERE g.user_id = usage_monthly.user_id
+						AND strftime('%Y-%m', g.created_at) = usage_monthly.year_month
+					)
+				`);
+				monthlyRecalc.run();
+			}
+
+			// Summarize by model
+			const summaryByModel: Record<string, { count: number; oldTotal: number; newTotal: number }> =
+				{};
+			for (const update of updates) {
+				if (!summaryByModel[update.model]) {
+					summaryByModel[update.model] = { count: 0, oldTotal: 0, newTotal: 0 };
+				}
+				summaryByModel[update.model].count++;
+				summaryByModel[update.model].oldTotal += update.oldCost;
+				summaryByModel[update.model].newTotal += update.newCost;
+			}
+
+			return {
+				dryRun,
+				totalGenerations: generations.length,
+				generationsUpdated: updates.length,
+				oldTotalCost: Math.round(oldTotalCost * 10000) / 10000,
+				newTotalCost: Math.round(newTotalCost * 10000) / 10000,
+				costDifference: Math.round((newTotalCost - oldTotalCost) * 10000) / 10000,
+				summaryByModel: Object.entries(summaryByModel).map(([model, data]) => ({
+					model,
+					count: data.count,
+					oldTotal: Math.round(data.oldTotal * 10000) / 10000,
+					newTotal: Math.round(data.newTotal * 10000) / 10000,
+					difference: Math.round((data.newTotal - data.oldTotal) * 10000) / 10000,
+				})),
+			};
+		},
+	);
+
+	// GET /api/admin/costs/pricing - Get current model pricing configuration
+	fastify.get("/api/admin/costs/pricing", async () => {
+		// Import the pricing map from replicate service
+		// We'll calculate sample costs for common scenarios
+		const models = [
+			"black-forest-labs/flux-schnell",
+			"black-forest-labs/flux-dev",
+			"black-forest-labs/flux-1.1-pro",
+			"black-forest-labs/flux-1.1-pro-ultra",
+			"black-forest-labs/flux-2-pro",
+			"black-forest-labs/flux-2-dev",
+			"black-forest-labs/flux-redux-schnell",
+			"black-forest-labs/flux-redux-dev",
+			"black-forest-labs/flux-kontext-pro",
+			"google/nano-banana-pro",
+		];
+
+		const pricing = models.map((model) => ({
+			model,
+			costPerImage1MP: calculateGenerationCost(model, { numOutputs: 1 }),
+			costPerImage2MP: calculateGenerationCost(model, {
+				numOutputs: 1,
+				resolution: "2 MP",
+			}),
+			costPerImage4MP: calculateGenerationCost(model, {
+				numOutputs: 1,
+				resolution: "4 MP",
+			}),
+		}));
+
+		return { pricing };
 	});
 }

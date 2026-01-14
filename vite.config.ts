@@ -5,4 +5,18 @@ import { defineConfig } from "vite";
 // https://vite.dev/config/
 export default defineConfig({
 	plugins: [react(), tailwindcss()],
+	build: {
+		rollupOptions: {
+			output: {
+				manualChunks: {
+					// Vendor chunks - split large dependencies
+					"vendor-react": ["react", "react-dom", "react-router-dom"],
+					// HEIC converter loaded only when needed
+					"heic-converter": ["heic2any"],
+				},
+			},
+		},
+		// Raise warning limit since we're now properly splitting
+		chunkSizeWarningLimit: 600,
+	},
 });

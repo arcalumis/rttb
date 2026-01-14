@@ -1,7 +1,12 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret-in-production";
+const isProduction = process.env.NODE_ENV === "production";
+const JWT_SECRET = process.env.JWT_SECRET || (isProduction ? undefined : "dev-secret-change-in-production");
+
+if (!JWT_SECRET) {
+	throw new Error("CRITICAL: JWT_SECRET environment variable is required in production.");
+}
 
 export interface JwtPayload {
 	userId: string;
@@ -16,7 +21,7 @@ declare module "fastify" {
 }
 
 export function signToken(payload: JwtPayload, rememberMe = false): string {
-	const expiresIn = rememberMe ? "30d" : "7d";
+	const expiresIn = rememberMe ? "7d" : "1d";
 	return jwt.sign(payload, JWT_SECRET, { expiresIn });
 }
 

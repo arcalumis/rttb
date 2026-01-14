@@ -1,13 +1,7 @@
 import { API_BASE } from "../config";
-import type { Generation, QueuedGeneration } from "../types";
+import type { Generation, GenerationImage, QueuedGeneration } from "../types";
 import { GenerationProgressBar } from "./GenerationProgressBar";
-import {
-	IconDownload,
-	IconRemix,
-	IconTrash,
-	IconUpscale,
-	IconVariations,
-} from "./Icons";
+import { IconDownload, IconRemix, IconTrash, IconUpscale, IconVariations } from "./Icons";
 
 interface ChatMessageProps {
 	generation: Generation | QueuedGeneration;
@@ -18,9 +12,38 @@ interface ChatMessageProps {
 	onImageClick?: (gen: Generation) => void;
 }
 
-function isQueuedGeneration(
-	gen: Generation | QueuedGeneration,
-): gen is QueuedGeneration {
+// 4-up grid component for variation results
+function ImageGrid({
+	images,
+	prompt,
+	onImageClick,
+}: {
+	images: GenerationImage[];
+	prompt: string;
+	onImageClick?: (url: string) => void;
+}) {
+	return (
+		<div className="grid grid-cols-2 gap-2 max-w-md">
+			{images.map((img, index) => (
+				<button
+					key={img.id}
+					type="button"
+					onClick={() => onImageClick?.(img.url)}
+					className="block rounded-lg overflow-hidden cyber-card hover:neon-border transition-all cursor-pointer aspect-square"
+				>
+					<img
+						src={`${API_BASE}${img.url}`}
+						alt={`${prompt} - variation ${index + 1}`}
+						className="w-full h-full object-cover"
+						loading="lazy"
+					/>
+				</button>
+			))}
+		</div>
+	);
+}
+
+function isQueuedGeneration(gen: Generation | QueuedGeneration): gen is QueuedGeneration {
 	return "status" in gen;
 }
 
@@ -42,51 +65,99 @@ export function ChatMessage({
 	const isFailed = isQueued && generation.status === "failed";
 	const isComplete = !isQueued || generation.status === "completed";
 
-	const imageUrl = isQueued
-		? generation.result?.imageUrl
-		: generation.imageUrl;
+	const imageUrl = isQueued ? generation.result?.imageUrl : generation.imageUrl;
+
+	// Check for multi-image variations (4-up grid)
+	const images = !isQueued ? (generation as Generation).images : undefined;
+	const hasMultipleImages = images && images.length > 1;
 
 	return (
-		<div className="py-3">
+		<div className="py-4">
 			{/* Timestamp */}
-			<div className="text-[10px] text-gray-500 mb-1">
+			<div className="text-[10px] text-[var(--text-secondary)] mb-2 mono">
 				{formatTime(generation.createdAt)}
 			</div>
 
 			{/* Prompt bubble */}
-			<div className="cyber-card neon-border rounded-lg p-3 mb-3 max-w-lg">
-				<p className="text-sm text-white">{generation.prompt}</p>
+			<div className="cyber-card rounded-lg p-3 mb-3 max-w-lg border-l-2 border-l-[var(--accent)]">
+				<p className="text-sm text-[var(--text-primary)]">{generation.prompt}</p>
 			</div>
 
 			{/* Image or status */}
 			{isGenerating ? (
-				<div className="cyber-card rounded-lg p-6 max-w-md flex flex-col items-center justify-center">
-					<div className="w-8 h-8 mb-3 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-					<span className="text-sm text-cyan-400 mb-3">Generating...</span>
-					{generation.startedAt && (
-						<div className="w-full max-w-48">
-							<GenerationProgressBar
-								startedAt={generation.startedAt}
-								estimatedDuration={generation.estimatedDuration || 30}
-								status={generation.status}
-							/>
-						</div>
-					)}
+				<div className="cyber-card rounded-lg p-4 max-w-md aspect-square flex items-center justify-center">
+					<div className="flex flex-col items-center w-full px-4">
+						{generation.startedAt ? (
+							<>
+								<div className="w-8 h-8 mb-3 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+								<span className="text-xs text-[var(--accent)] mb-3 mono">generating</span>
+								<GenerationProgressBar
+									startedAt={generation.startedAt}
+									estimatedDuration={generation.estimatedDuration || 30}
+									status={generation.status}
+								/>
+							</>
+						) : (
+							<div className="text-sm text-[var(--text-secondary)] mono">
+								Queued<span className="cursor-blink">_</span>
+							</div>
+						)}
+					</div>
 				</div>
 			) : isFailed ? (
-				<div className="cyber-card rounded-lg p-4 max-w-md border border-red-500/50">
-					<span className="text-sm text-red-400">
+				<div className="cyber-card rounded-lg p-4 max-w-md border-l-2 border-l-[var(--accent-alt)]">
+					<span className="text-sm text-[var(--accent-alt)]">
 						Generation failed: {generation.error || "Unknown error"}
 					</span>
 				</div>
-			) : imageUrl ? (
+			) : hasMultipleImages ? (
+				// 4-up grid for variations
 				<div className="max-w-md">
-					{/* Image */}
+					<ImageGrid
+						images={images}
+						prompt={generation.prompt}
+						onImageClick={(url) => {
+							// Create a synthetic generation for the clicked image
+							if (onImageClick && !isQueued) {
+								const gen = generation as Generation;
+								onImageClick({ ...gen, imageUrl: url });
+							}
+						}}
+					/>
+
+					{/* Action buttons for grid */}
+					{isComplete && !isQueued && (
+						<div className="flex items-center gap-1 mt-3">
+							{onVariations && (
+								<button
+									type="button"
+									onClick={() => onVariations(generation as Generation)}
+									className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:neon-border rounded-lg transition-all"
+									title="Generate more variations"
+								>
+									<IconVariations className="w-4 h-4" />
+									<span className="hidden sm:inline">Vary Again</span>
+								</button>
+							)}
+							{onTrash && (
+								<button
+									type="button"
+									onClick={() => onTrash(generation.id)}
+									className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:bg-[var(--accent-alt)]/20 rounded-lg transition-all ml-auto"
+									title="Move to trash"
+								>
+									<IconTrash className="w-4 h-4" />
+								</button>
+							)}
+						</div>
+					)}
+				</div>
+			) : imageUrl ? (
+				// Single image display
+				<div className="max-w-md">
 					<button
 						type="button"
-						onClick={() =>
-							onImageClick && !isQueued && onImageClick(generation as Generation)
-						}
+						onClick={() => onImageClick && !isQueued && onImageClick(generation as Generation)}
 						className="block w-full rounded-lg overflow-hidden cyber-card hover:neon-border transition-all cursor-pointer"
 					>
 						<img
@@ -97,17 +168,17 @@ export function ChatMessage({
 						/>
 					</button>
 
-					{/* Action buttons */}
+					{/* Action buttons for single image */}
 					{isComplete && !isQueued && (
-						<div className="flex items-center gap-1 mt-2">
+						<div className="flex items-center gap-1 mt-3">
 							{onVariations && (
 								<button
 									type="button"
 									onClick={() => onVariations(generation as Generation)}
-									className="flex items-center gap-1 px-2 py-1 text-xs cyber-card hover:neon-border rounded transition-all"
+									className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:neon-border rounded-lg transition-all"
 									title="Generate variations"
 								>
-									<IconVariations className="w-3.5 h-3.5" />
+									<IconVariations className="w-4 h-4" />
 									<span className="hidden sm:inline">Vary</span>
 								</button>
 							)}
@@ -115,10 +186,10 @@ export function ChatMessage({
 								<button
 									type="button"
 									onClick={() => onUpscale(generation as Generation)}
-									className="flex items-center gap-1 px-2 py-1 text-xs cyber-card hover:neon-border rounded transition-all"
+									className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:neon-border rounded-lg transition-all"
 									title="Upscale to higher resolution"
 								>
-									<IconUpscale className="w-3.5 h-3.5" />
+									<IconUpscale className="w-4 h-4" />
 									<span className="hidden sm:inline">Upscale</span>
 								</button>
 							)}
@@ -126,29 +197,29 @@ export function ChatMessage({
 								<button
 									type="button"
 									onClick={() => onRemix(generation as Generation)}
-									className="flex items-center gap-1 px-2 py-1 text-xs cyber-card hover:neon-border rounded transition-all"
+									className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:neon-border rounded-lg transition-all"
 									title="Use as input for new generation"
 								>
-									<IconRemix className="w-3.5 h-3.5" />
+									<IconRemix className="w-4 h-4" />
 									<span className="hidden sm:inline">Remix</span>
 								</button>
 							)}
 							<a
 								href={`${API_BASE}${imageUrl}`}
 								download
-								className="flex items-center gap-1 px-2 py-1 text-xs cyber-card hover:neon-border rounded transition-all"
+								className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:neon-border rounded-lg transition-all"
 								title="Download image"
 							>
-								<IconDownload className="w-3.5 h-3.5" />
+								<IconDownload className="w-4 h-4" />
 							</a>
 							{onTrash && (
 								<button
 									type="button"
 									onClick={() => onTrash(generation.id)}
-									className="flex items-center gap-1 px-2 py-1 text-xs cyber-card hover:bg-red-500/20 hover:text-red-400 rounded transition-all ml-auto"
+									className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:bg-[var(--accent-alt)]/20 rounded-lg transition-all ml-auto"
 									title="Move to trash"
 								>
-									<IconTrash className="w-3.5 h-3.5" />
+									<IconTrash className="w-4 h-4" />
 								</button>
 							)}
 						</div>

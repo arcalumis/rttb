@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { API_BASE } from "../config";
 import type { Generation, QueuedGeneration, Upload } from "../types";
 import { GenerationProgressBar } from "./GenerationProgressBar";
@@ -62,6 +62,32 @@ export function ImageGallery({
 }: ImageGalleryProps) {
 	const [selectedImage, setSelectedImage] = useState<Generation | null>(null);
 	const [selectedUpload, setSelectedUpload] = useState<Upload | null>(null);
+	const sentinelRef = useRef<HTMLDivElement>(null);
+
+	// Infinite scroll using IntersectionObserver
+	useEffect(() => {
+		if (!hasMore || loading || !onLoadMore) return;
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting && hasMore && !loading) {
+					onLoadMore();
+				}
+			},
+			{ threshold: 0.1, rootMargin: "100px" }
+		);
+
+		const sentinel = sentinelRef.current;
+		if (sentinel) {
+			observer.observe(sentinel);
+		}
+
+		return () => {
+			if (sentinel) {
+				observer.unobserve(sentinel);
+			}
+		};
+	}, [hasMore, loading, onLoadMore]);
 
 	const hasQueuedItems = queuedItems.length > 0;
 	const hasGenerations = generations.length > 0;
@@ -343,16 +369,15 @@ export function ImageGallery({
 					))}
 			</div>
 
+			{/* Infinite scroll sentinel */}
 			{hasMore && (
-				<div className="flex justify-center mt-6">
-					<button
-						type="button"
-						onClick={onLoadMore}
-						disabled={loading}
-						className="px-6 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 rounded-lg transition-colors"
-					>
-						{loading ? "Loading..." : "Load More"}
-					</button>
+				<div ref={sentinelRef} className="flex justify-center py-6 col-span-full">
+					{loading && (
+						<div className="flex items-center gap-2 text-[var(--text-secondary)]">
+							<div className="w-4 h-4 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+							<span className="text-xs mono">Loading more...</span>
+						</div>
+					)}
 				</div>
 			)}
 
