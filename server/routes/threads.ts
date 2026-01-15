@@ -5,6 +5,15 @@ import type { FastifyInstance } from "fastify";
 import { getDb } from "../db";
 import { authMiddleware } from "../middleware/auth";
 
+interface ProjectMetadata {
+	aspectRatio?: string;
+	purpose?: string;
+	style?: string;
+	referenceImages?: string[];
+	mood?: string;
+	olloEnabled?: boolean;
+}
+
 interface Thread {
 	id: string;
 	userId: string;
@@ -14,6 +23,7 @@ interface Thread {
 	archivedAt?: string;
 	generationCount?: number;
 	lastGenerationAt?: string;
+	projectMetadata?: ProjectMetadata;
 }
 
 interface ThreadDbRow {
@@ -26,14 +36,17 @@ interface ThreadDbRow {
 	deleted_at: string | null;
 	generation_count?: number;
 	last_generation_at?: string | null;
+	project_metadata?: string | null;
 }
 
 interface CreateThreadBody {
 	title?: string;
+	projectMetadata?: ProjectMetadata;
 }
 
 interface UpdateThreadBody {
-	title: string;
+	title?: string;
+	projectMetadata?: ProjectMetadata;
 }
 
 interface ThreadParams {
@@ -61,6 +74,7 @@ export async function threadRoutes(fastify: FastifyInstance): Promise<void> {
 					t.created_at,
 					t.updated_at,
 					t.archived_at,
+					t.project_metadata,
 					COUNT(g.id) as generation_count,
 					MAX(g.created_at) as last_generation_at
 				FROM threads t
@@ -79,6 +93,7 @@ export async function threadRoutes(fastify: FastifyInstance): Promise<void> {
 				archivedAt: row.archived_at || undefined,
 				generationCount: row.generation_count || 0,
 				lastGenerationAt: row.last_generation_at || undefined,
+				projectMetadata: row.project_metadata ? JSON.parse(row.project_metadata) : undefined,
 			}));
 
 			return { threads };
@@ -92,15 +107,16 @@ export async function threadRoutes(fastify: FastifyInstance): Promise<void> {
 		async (request) => {
 			const db = getDb();
 			const userId = request.user?.userId;
-			const { title } = request.body;
+			const { title, projectMetadata } = request.body;
 
 			const threadId = crypto.randomUUID();
 			const threadTitle = title || "New Thread";
+			const metadataJson = projectMetadata ? JSON.stringify(projectMetadata) : null;
 
 			db.prepare(`
-				INSERT INTO threads (id, user_id, title, created_at, updated_at)
-				VALUES (?, ?, ?, datetime('now'), datetime('now'))
-			`).run(threadId, userId, threadTitle);
+				INSERT INTO threads (id, user_id, title, project_metadata, created_at, updated_at)
+				VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+			`).run(threadId, userId, threadTitle, metadataJson);
 
 			return {
 				id: threadId,
@@ -108,6 +124,7 @@ export async function threadRoutes(fastify: FastifyInstance): Promise<void> {
 				title: threadTitle,
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString(),
+				projectMetadata,
 			};
 		}
 	);
@@ -122,7 +139,7 @@ export async function threadRoutes(fastify: FastifyInstance): Promise<void> {
 			const { id } = request.params;
 
 			const thread = db.prepare(`
-				SELECT id, user_id, title, created_at, updated_at, archived_at
+				SELECT id, user_id, title, created_at, updated_at, archived_at, project_metadata
 				FROM threads
 				WHERE id = ? AND user_id = ? AND deleted_at IS NULL
 			`).get(id, userId) as ThreadDbRow | undefined;
@@ -160,6 +177,7 @@ export async function threadRoutes(fastify: FastifyInstance): Promise<void> {
 				createdAt: thread.created_at,
 				updatedAt: thread.updated_at,
 				archivedAt: thread.archived_at || undefined,
+				projectMetadata: thread.project_metadata ? JSON.parse(thread.project_metadata) : undefined,
 				generations: generations.map((g) => {
 					const params = g.parameters ? JSON.parse(g.parameters) : undefined;
 					const images = params?.images as { id: string; url: string }[] | undefined;
@@ -183,7 +201,7 @@ export async function threadRoutes(fastify: FastifyInstance): Promise<void> {
 		}
 	);
 
-	// PATCH /api/threads/:id - Update thread (rename)
+	// PATCH /api/threads/:id - Update thread (rename and/or metadata)
 	fastify.patch<{ Params: ThreadParams; Body: UpdateThreadBody }>(
 		"/api/threads/:id",
 		{ preHandler: authMiddleware },
@@ -191,7 +209,7 @@ export async function threadRoutes(fastify: FastifyInstance): Promise<void> {
 			const db = getDb();
 			const userId = request.user?.userId;
 			const { id } = request.params;
-			const { title } = request.body;
+			const { title, projectMetadata } = request.body;
 
 			// Verify ownership
 			const thread = db.prepare(
@@ -202,10 +220,26 @@ export async function threadRoutes(fastify: FastifyInstance): Promise<void> {
 				return reply.status(404).send({ error: "Thread not found" });
 			}
 
+			// Build dynamic update based on what's provided
+			const updates: string[] = ["updated_at = datetime('now')"];
+			const values: (string | null)[] = [];
+
+			if (title !== undefined) {
+				updates.push("title = ?");
+				values.push(title);
+			}
+
+			if (projectMetadata !== undefined) {
+				updates.push("project_metadata = ?");
+				values.push(JSON.stringify(projectMetadata));
+			}
+
+			values.push(id);
+
 			db.prepare(`
-				UPDATE threads SET title = ?, updated_at = datetime('now')
+				UPDATE threads SET ${updates.join(", ")}
 				WHERE id = ?
-			`).run(title, id);
+			`).run(...values);
 
 			return { success: true };
 		}

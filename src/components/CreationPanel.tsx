@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE } from "../config";
+import { isVariationModel, modelRequiresImage } from "../config/models";
 import type { Model } from "../types";
 import { blobToFile, convertHeicToPng, isHeicFile, resizeImageIfNeeded } from "../utils/imageResize";
 import { ImagePicker } from "./ImagePicker";
+import { ImageRequiredTooltip, ModelInfoTooltip } from "./ModelInfoTooltip";
 
 // Aspect ratio options
 const ASPECT_RATIOS = [
@@ -79,6 +81,13 @@ export function CreationPanel({
 	const cameraInputRef = useRef<HTMLInputElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
+	// Check if current model requires an image
+	const requiresImage = modelRequiresImage(selectedModel);
+	const needsImageHighlight = requiresImage && imageInputs.length === 0;
+
+	// Check if current model is a variation model (doesn't use prompts)
+	const isVariation = isVariationModel(selectedModel);
+
 	// Auto-resize textarea
 	useEffect(() => {
 		if (textareaRef.current) {
@@ -90,6 +99,13 @@ export function CreationPanel({
 
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
+		// For variation models, don't require a prompt - just need an image
+		if (isVariation) {
+			if (imageInputs.length > 0 && !loading && !enhancing) {
+				onGenerate(""); // Empty prompt for variations
+			}
+			return;
+		}
 		if (prompt.trim() && !loading && !enhancing) {
 			onGenerate(prompt.trim());
 			setPrompt("");
@@ -221,18 +237,21 @@ export function CreationPanel({
 				<div className="flex flex-col md:flex-row gap-2 md:items-stretch">
 					{/* Column 1: Options (3 rows) */}
 					<div className="order-2 md:order-1 flex-shrink-0 flex flex-col gap-2">
-						{/* Row 1: Model Selector */}
-						<select
-							value={selectedModel}
-							onChange={(e) => onSelectModel(e.target.value)}
-							className="cyber-input flex-1 w-full min-w-40 px-2 rounded text-xs text-[var(--text-primary)] flex items-center"
-						>
-							{models.map((m) => (
-								<option key={m.id} value={m.id}>
-									{m.name}
-								</option>
-							))}
-						</select>
+						{/* Row 1: Model Selector with Info */}
+						<div className="flex items-center gap-1.5">
+							<ModelInfoTooltip modelId={selectedModel} />
+							<select
+								value={selectedModel}
+								onChange={(e) => onSelectModel(e.target.value)}
+								className="cyber-input flex-1 w-full min-w-40 px-2 rounded text-xs text-[var(--text-primary)] flex items-center"
+							>
+								{models.map((m) => (
+									<option key={m.id} value={m.id}>
+										{m.name}
+									</option>
+								))}
+							</select>
+						</div>
 
 						{/* Row 2: Aspect Ratio & Resolution */}
 						{supportsImageInput && (
@@ -272,7 +291,9 @@ export function CreationPanel({
 									type="button"
 									onClick={() => cameraInputRef.current?.click()}
 									disabled={uploading || converting || imageInputs.length >= maxImages}
-									className="cyber-input hover:border-[var(--accent)] px-2 rounded text-xs cursor-pointer transition-all flex items-center justify-center"
+									className={`cyber-input hover:border-[var(--accent)] px-2 rounded text-xs cursor-pointer transition-all flex items-center justify-center ${
+										needsImageHighlight ? "border-[var(--accent)] sacred-glow" : ""
+									}`}
 									title="Take photo"
 								>
 									<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -289,7 +310,9 @@ export function CreationPanel({
 									className="hidden"
 								/>
 								{/* Upload button - opens file picker */}
-								<label className="flex-1 cyber-input hover:border-[var(--accent)] px-2 rounded text-xs cursor-pointer transition-all flex items-center justify-center">
+								<label className={`flex-1 cyber-input hover:border-[var(--accent)] px-2 rounded text-xs cursor-pointer transition-all flex items-center justify-center ${
+									needsImageHighlight ? "border-[var(--accent)] sacred-glow" : ""
+								}`}>
 									<input
 										ref={fileInputRef}
 										type="file"
@@ -304,7 +327,9 @@ export function CreationPanel({
 								<button
 									type="button"
 									onClick={() => setShowPicker(true)}
-									className="flex-1 cyber-input hover:border-[var(--accent)] px-2 rounded text-xs transition-all flex items-center justify-center"
+									className={`flex-1 cyber-input hover:border-[var(--accent)] px-2 rounded text-xs transition-all flex items-center justify-center ${
+										needsImageHighlight ? "border-[var(--accent)] sacred-glow" : ""
+									}`}
 								>
 									Library
 								</button>
@@ -314,43 +339,53 @@ export function CreationPanel({
 
 					{/* Column 2: Prompt */}
 					<div className="order-1 md:order-2 flex-1 flex flex-col">
+						{/* Image Required Tooltip */}
+						<ImageRequiredTooltip modelId={selectedModel} show={needsImageHighlight} />
 						<textarea
 							ref={textareaRef}
-							value={prompt}
-							onChange={(e) => setPrompt(e.target.value)}
+							value={isVariation ? "" : prompt}
+							onChange={(e) => !isVariation && setPrompt(e.target.value)}
 							onKeyDown={handleKeyDown}
-							placeholder="Describe your vision..."
-							disabled={enhancing}
-							className="cyber-input w-full h-full px-4 py-3 rounded-lg text-sm resize-none"
+							placeholder={
+								isVariation
+									? "No prompt needed — upload an image and we'll generate 4 variations"
+									: "Describe your vision..."
+							}
+							disabled={enhancing || isVariation}
+							className={`cyber-input w-full h-full px-4 py-3 rounded-lg text-sm resize-none ${
+								isVariation ? "opacity-60 cursor-not-allowed" : ""
+							}`}
 							style={{ minHeight: "120px" }}
 						/>
 					</div>
 
 					{/* Column 3: Action Buttons (2 rows) */}
 					<div className="order-3 flex md:flex-col gap-2">
-						<button
-							type="button"
-							onClick={handleEnhance}
-							disabled={!prompt.trim() || enhancing || loading}
-							className={`enhance-btn flex-1 w-11 rounded-lg flex items-center justify-center ${sparkling ? "sparkling" : ""}`}
-							title="Enhance prompt with AI"
-						>
-							{enhancing ? (
-								<svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-									<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-									<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-								</svg>
-							) : (
-								<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-								</svg>
-							)}
-						</button>
+						{!isVariation && (
+							<button
+								type="button"
+								onClick={handleEnhance}
+								disabled={!prompt.trim() || enhancing || loading}
+								className={`enhance-btn flex-1 w-11 rounded-lg flex items-center justify-center ${sparkling ? "sparkling" : ""}`}
+								title="Enhance prompt with AI"
+							>
+								{enhancing ? (
+									<svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+										<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+										<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+									</svg>
+								) : (
+									<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+									</svg>
+								)}
+							</button>
+						)}
 						<button
 							type="submit"
-							disabled={!prompt.trim() || loading || enhancing}
+							disabled={isVariation ? imageInputs.length === 0 || loading : !prompt.trim() || loading || enhancing}
 							className="submit-btn flex-1 w-11 rounded-lg flex items-center justify-center"
-							title="Generate"
+							title={isVariation ? "Generate 4 variations" : "Generate"}
 						>
 							{isGenerating ? (
 								<span className="flex items-center gap-1">

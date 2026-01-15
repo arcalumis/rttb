@@ -241,6 +241,14 @@ export interface Thread {
 	generationCount?: number;
 	lastGenerationAt?: string;
 	generations?: Generation[];
+	projectMetadata?: {
+		aspectRatio?: string;
+		purpose?: string;
+		style?: string;
+		referenceImages?: string[];
+		mood?: string;
+		olloEnabled?: boolean;
+	};
 }
 
 export interface ThreadsResponse {

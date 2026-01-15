@@ -9,7 +9,7 @@ export function ThemeSwitcher({ compact = false }: ThemeSwitcherProps) {
 	const { themeName, setTheme } = useTheme();
 	const [isOpen, setIsOpen] = useState(false);
 
-	const themeOptions: ThemeName[] = ["terminal", "anime-night", "phosphor", "clean"];
+	const themeOptions: ThemeName[] = ["divine", "terminal", "anime-night", "phosphor", "clean"];
 
 	if (compact) {
 		return (

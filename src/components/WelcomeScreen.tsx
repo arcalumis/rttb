@@ -1,6 +1,9 @@
+import { OlloAvatar } from "./OlloAvatar";
+
 interface WelcomeScreenProps {
 	onPromptClick: (prompt: string) => void;
 	onCategoryClick: (category: string) => void;
+	onStartWithOllo?: () => void;
 }
 
 const categories = [
@@ -11,24 +14,39 @@ const categories = [
 ];
 
 const suggestions = [
-	"A samurai standing in neon rain, cyberpunk aesthetic",
-	"Vintage anime screenshot, 90s style cel animation",
-	"Retro sci-fi movie poster with bold typography",
+	"A divine being emerging from golden light",
 	"Oil painting of a sunset over ancient ruins",
-	"Minimalist logo design, geometric shapes",
+	"Ethereal portrait bathed in warm amber glow",
+	"Celestial landscape with radiant sky",
+	"Sacred geometry floating in cosmic space",
 	"Futuristic city skyline at golden hour",
 ];
 
-export function WelcomeScreen({ onPromptClick, onCategoryClick }: WelcomeScreenProps) {
+export function WelcomeScreen({ onPromptClick, onCategoryClick, onStartWithOllo }: WelcomeScreenProps) {
 	return (
 		<div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
 			{/* Main Heading */}
 			<h1 className="welcome-heading text-3xl md:text-4xl text-center text-[var(--text-primary)] mb-2">
 				What will you create?
 			</h1>
-			<p className="text-sm text-[var(--text-secondary)] mb-8">
-				Describe your vision and let AI bring it to life
+			<p className="text-sm text-[var(--text-secondary)] mb-6">
+				Describe your vision and let divine inspiration bring it to life
 			</p>
+
+			{/* Ollo CTA */}
+			{onStartWithOllo && (
+				<div className="flex flex-col items-center gap-3 mb-8">
+					<button
+						type="button"
+						onClick={onStartWithOllo}
+						className="divine-gradient rounded-xl py-3 px-6 flex items-center gap-3 sacred-glow hover:scale-[1.02] transition-transform"
+					>
+						<OlloAvatar size="sm" animated={false} />
+						<span className="text-base font-semibold">Start building with Ollo</span>
+					</button>
+					<span className="text-xs text-[var(--text-secondary)]">or dive right in below</span>
+				</div>
+			)}
 
 			{/* Category Pills */}
 			<div className="flex flex-wrap justify-center gap-2 mb-10">
@@ -67,7 +85,7 @@ export function WelcomeScreen({ onPromptClick, onCategoryClick }: WelcomeScreenP
 			{/* Decorative Element */}
 			<div className="mt-12 flex items-center gap-3 text-xs text-[var(--text-secondary)]">
 				<div className="w-8 h-px bg-[var(--border)]" />
-				<span className="mono">powered by FLUX + Nano Banana</span>
+				<span className="mono">powered by FLUX</span>
 				<div className="w-8 h-px bg-[var(--border)]" />
 			</div>
 		</div>

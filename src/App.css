@@ -285,3 +285,120 @@ select {
 .mono {
 	font-family: "JetBrains Mono", "SF Mono", "Monaco", monospace;
 }
+
+/* ============================================
+   Divine Theme - Holy Fiery Light Effects
+   ============================================ */
+
+/* Sacred Radiance - soft pulsing holy glow */
+@keyframes sacred-radiance {
+	0%, 100% {
+		box-shadow:
+			0 0 5px color-mix(in srgb, var(--accent) 30%, transparent),
+			0 0 10px color-mix(in srgb, var(--accent) 15%, transparent);
+	}
+	50% {
+		box-shadow:
+			0 0 10px color-mix(in srgb, var(--accent) 50%, transparent),
+			0 0 25px color-mix(in srgb, var(--accent) 25%, transparent),
+			0 0 40px color-mix(in srgb, var(--accent) 10%, transparent);
+	}
+}
+
+/* Divine Shimmer - gentle brightness pulse */
+@keyframes divine-shimmer {
+	0% {
+		transform: scale(1);
+		filter: brightness(1) saturate(1);
+	}
+	50% {
+		transform: scale(1.02);
+		filter: brightness(1.15) saturate(1.1);
+	}
+	100% {
+		transform: scale(1);
+		filter: brightness(1) saturate(1);
+	}
+}
+
+/* Luminous Pulse - for active/focused elements */
+@keyframes luminous-pulse {
+	0%, 100% {
+		box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 40%, transparent);
+		border-color: var(--accent);
+	}
+	50% {
+		box-shadow:
+			0 0 15px color-mix(in srgb, var(--accent) 60%, transparent),
+			0 0 30px color-mix(in srgb, var(--accent) 30%, transparent);
+		border-color: color-mix(in srgb, var(--accent) 80%, white);
+	}
+}
+
+/* Fire Flicker - subtle organic variation */
+@keyframes fire-flicker {
+	0%, 100% { opacity: 1; }
+	25% { opacity: 0.96; }
+	50% { opacity: 1; }
+	75% { opacity: 0.98; }
+}
+
+/* Divine border - warm luminous edge */
+.divine-border {
+	border: 1px solid var(--accent);
+	box-shadow:
+		0 0 15px color-mix(in srgb, var(--accent) 20%, transparent),
+		0 0 30px color-mix(in srgb, var(--accent) 10%, transparent),
+		inset 0 0 10px color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+/* Divine gradient - gold to fire-orange */
+.divine-gradient {
+	background: linear-gradient(
+		135deg,
+		var(--accent) 0%,
+		color-mix(in srgb, var(--accent) 70%, var(--accent-alt)) 50%,
+		var(--accent-alt) 100%
+	);
+	color: var(--bg-primary);
+	font-weight: 600;
+}
+
+/* Sacred glow - ambient holy light effect */
+.sacred-glow {
+	animation: sacred-radiance 3s ease-in-out infinite;
+}
+
+/* Divine text glow - warm text shadow */
+.divine-text {
+	text-shadow:
+		0 0 10px color-mix(in srgb, var(--accent) 40%, transparent),
+		0 0 20px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* Ollo-specific styling */
+.ollo-avatar {
+	animation: fire-flicker 2s ease-in-out infinite, sacred-radiance 4s ease-in-out infinite;
+}
+
+.ollo-message {
+	background: linear-gradient(
+		135deg,
+		color-mix(in srgb, var(--accent) 10%, var(--bg-secondary)) 0%,
+		color-mix(in srgb, var(--accent) 5%, var(--bg-secondary)) 100%
+	);
+	border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.ollo-option {
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border);
+	transition: all 0.2s ease;
+}
+
+.ollo-option:hover {
+	background: color-mix(in srgb, var(--accent) 15%, var(--bg-tertiary));
+	border-color: var(--accent);
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 20%, transparent);
+}

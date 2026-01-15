@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { GenerateRequest } from "../../src/types";
 import { getDb } from "../db";
 import { authMiddleware } from "../middleware/auth";
-import { enhancePrompt, generateImage } from "../services/replicate";
+import { enhancePrompt, generateImage, MODELS } from "../services/replicate";
 import { canUserGenerate, deductCredit, recordUsage } from "../services/usage";
 import { getUserApiKey } from "./user";
 
@@ -50,8 +50,19 @@ export async function generateRoutes(fastify: FastifyInstance): Promise<void> {
 				return reply.status(401).send({ error: "Unauthorized" });
 			}
 
-			if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+			// Check if this is a variation model (doesn't require prompt)
+			const modelConfig = MODELS.find((m) => m.id === model);
+			const isVariationModel = modelConfig?.isVariationModel === true;
+			const hasImageInputs = imageInputs && imageInputs.length > 0;
+
+			// Variation models can work without a prompt (image-to-image)
+			if (!isVariationModel && (!prompt || typeof prompt !== "string" || prompt.trim().length === 0)) {
 				return reply.status(400).send({ error: "Prompt is required" });
+			}
+
+			// Variation models require image inputs
+			if (isVariationModel && !hasImageInputs) {
+				return reply.status(400).send({ error: "Variation models require an input image" });
 			}
 
 			// Check if user can generate based on subscription limits

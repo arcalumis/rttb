@@ -464,6 +464,13 @@ export function initializeSchema(db: Database): void {
 		// Index already exists
 	}
 
+	// Add project_metadata column to threads for Ollo-guided project settings
+	try {
+		db.exec("ALTER TABLE threads ADD COLUMN project_metadata TEXT DEFAULT NULL");
+	} catch {
+		// Column already exists
+	}
+
 	// Migrate existing generations to a "History" thread if they don't have a thread_id
 	// This runs on every startup but only affects generations without a thread_id
 	const usersWithOrphanedGenerations = db

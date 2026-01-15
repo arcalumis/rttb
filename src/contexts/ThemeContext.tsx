@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
-export type ThemeName = "terminal" | "anime-night" | "phosphor" | "clean";
+export type ThemeName = "divine" | "terminal" | "anime-night" | "phosphor" | "clean";
 
 export interface ThemeColors {
 	bgPrimary: string;
@@ -23,6 +23,22 @@ export interface Theme {
 }
 
 export const themes: Record<ThemeName, Theme> = {
+	divine: {
+		name: "divine",
+		label: "Divine",
+		colors: {
+			bgPrimary: "#0a0908",        // Deep void with warm undertone
+			bgSecondary: "#141210",      // Slightly lighter void
+			bgTertiary: "#1c1915",       // Tertiary with golden hint
+			accent: "#d4a846",           // Sacred gold/amber
+			accentAlt: "#e87c3e",        // Sacred fire orange
+			textPrimary: "#f5efe6",      // Warm off-white (parchment)
+			textSecondary: "#8a8078",    // Muted warm gray
+			border: "#2a2520",           // Dark warm border
+			cardBg: "rgba(20, 18, 16, 0.95)",
+			cardBorder: "rgba(212, 168, 70, 0.25)",
+		},
+	},
 	terminal: {
 		name: "terminal",
 		label: "Terminal",
@@ -104,7 +120,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 		if (stored && stored in themes) {
 			return stored as ThemeName;
 		}
-		return "terminal";
+		return "divine";
 	});
 
 	const theme = themes[themeName];

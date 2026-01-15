@@ -11,7 +11,11 @@ import { Sidebar } from "./components/Sidebar";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { ThreadDeleteDialog } from "./components/ThreadDeleteDialog";
 import { UserSettings } from "./components/UserSettings";
+import { ModelsHelpButton, ModelsReferenceModal } from "./components/ModelsReferenceModal";
+import { OlloWelcomeFlow } from "./components/OlloWelcomeFlow";
+import { isVariationModel } from "./config/models";
 import { WelcomeScreen } from "./components/WelcomeScreen";
+import type { ProjectMetadata } from "./types/ollo";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { useEnhancePrompt, useGenerate, useHistory, useModels, useThreads, useUploads } from "./hooks/useApi";
 import { AdminLayout } from "./pages/AdminLayout";
@@ -78,6 +82,12 @@ function MainApp() {
 	// Thread delete dialog state
 	const [threadToDelete, setThreadToDelete] = useState<Thread | null>(null);
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+	// Ollo welcome flow state
+	const [showOlloFlow, setShowOlloFlow] = useState(false);
+
+	// Models reference modal state
+	const [showModelsRef, setShowModelsRef] = useState(false);
 	const {
 		history,
 		fetchHistory,
@@ -213,6 +223,7 @@ function MainApp() {
 
 	const handleGenerate = async (prompt: string) => {
 		const queueId = crypto.randomUUID();
+		const isVariation = isVariationModel(selectedModel);
 		const request = {
 			prompt,
 			model: selectedModel,
@@ -220,12 +231,14 @@ function MainApp() {
 			aspectRatio: supportsImageInput ? creationOptions.aspectRatio : undefined,
 			resolution: supportsImageInput ? creationOptions.resolution : undefined,
 			outputFormat: supportsImageInput ? creationOptions.outputFormat : undefined,
-			threadId: activeThread?.id, // Use current thread if we have one
+			threadId: activeThread?.id,
+			// Variation models always generate 4 outputs
+			numOutputs: isVariation ? 4 : undefined,
 		};
 
 		const queueItem: QueuedGeneration = {
 			id: queueId,
-			prompt,
+			prompt: isVariation ? "Generating 4 variations" : prompt,
 			model: selectedModel,
 			status: "queued",
 			createdAt: new Date().toISOString(),
@@ -391,6 +404,27 @@ function MainApp() {
 		setViewMode("chat");
 	};
 
+	const handleStartWithOllo = () => {
+		setShowOlloFlow(true);
+	};
+
+	const handleOlloComplete = async (metadata: ProjectMetadata) => {
+		setShowOlloFlow(false);
+		// Update creation options with Ollo's selections
+		if (metadata.aspectRatio) {
+			setCreationOptions((prev) => ({ ...prev, aspectRatio: metadata.aspectRatio as string }));
+		}
+		// Clear active thread to show the new project is ready
+		clearActiveThread();
+		setViewMode("chat");
+	};
+
+	const handleOlloSkip = () => {
+		setShowOlloFlow(false);
+		clearActiveThread();
+		setViewMode("chat");
+	};
+
 	const handleSelectThread = async (thread: Thread) => {
 		await fetchThread(thread.id);
 		setViewMode("chat");
@@ -463,7 +497,8 @@ function MainApp() {
 							</h2>
 						)}
 					</div>
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-3">
+						<ModelsHelpButton onClick={() => setShowModelsRef(true)} />
 						{history?.totalCost !== undefined && (
 							<div className="text-xs text-[var(--text-secondary)]">
 								Total: <span className="text-[var(--accent)]">${history.totalCost.toFixed(4)}</span>
@@ -481,23 +516,33 @@ function MainApp() {
 								<WelcomeScreen
 									onPromptClick={handlePromptClick}
 									onCategoryClick={handleCategoryClick}
+									onStartWithOllo={handleStartWithOllo}
 								/>
 							) : !activeThread && threads.length > 0 && !generationQueue.some((q) => !q.threadId) ? (
 								// No thread selected but threads exist and no pending new generations - show prompt to select or create
 								<div className="flex flex-col items-center justify-center min-h-[60vh]">
 									<h2 className="welcome-heading text-2xl text-[var(--text-primary)] mb-2">
-										Select a thread or start a new one
+										Ready to create?
 									</h2>
 									<p className="text-sm text-[var(--text-secondary)] mb-6">
-										Choose a conversation from the sidebar or create a new thread
+										Start a new project or continue an existing thread
 									</p>
-									<button
-										type="button"
-										onClick={handleNewThread}
-										className="cyber-button rounded-lg py-2.5 px-6"
-									>
-										New Thread
-									</button>
+									<div className="flex flex-col items-center gap-4">
+										<button
+											type="button"
+											onClick={handleStartWithOllo}
+											className="divine-gradient rounded-xl py-3 px-6 flex items-center gap-3 sacred-glow hover:scale-[1.02] transition-transform"
+										>
+											<span className="text-base font-semibold">Start building with Ollo</span>
+										</button>
+										<button
+											type="button"
+											onClick={handleNewThread}
+											className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"
+										>
+											or dive right in →
+										</button>
+									</div>
 								</div>
 							) : (
 								<>
@@ -583,6 +628,23 @@ function MainApp() {
 				}}
 				thread={threadToDelete}
 				onConfirm={handleConfirmDeleteThread}
+			/>
+
+			<OlloWelcomeFlow
+				isOpen={showOlloFlow}
+				onClose={() => setShowOlloFlow(false)}
+				onComplete={handleOlloComplete}
+				onSkip={handleOlloSkip}
+			/>
+
+			<ModelsReferenceModal
+				isOpen={showModelsRef}
+				onClose={() => setShowModelsRef(false)}
+				onSelectModel={(modelId) => {
+					setSelectedModel(modelId);
+					setShowModelsRef(false);
+				}}
+				currentModel={selectedModel}
 			/>
 		</div>
 	);
