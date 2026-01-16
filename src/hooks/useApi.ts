@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API_BASE } from "../config";
 import type { GenerateRequest, GenerateResponse, HistoryResponse, ModelsResponse, Thread, ThreadsResponse } from "../types";
 
@@ -339,6 +339,12 @@ export function useThreads(token: string | null) {
 	const [threads, setThreads] = useState<Thread[]>([]);
 	const [activeThread, setActiveThread] = useState<Thread | null>(null);
 	const [loading, setLoading] = useState(false);
+
+	// Clear threads when token changes (user logged out or switched accounts)
+	useEffect(() => {
+		setThreads([]);
+		setActiveThread(null);
+	}, [token]);
 
 	const fetchThreads = useCallback(async () => {
 		if (!token) return;

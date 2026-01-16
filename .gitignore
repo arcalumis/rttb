@@ -31,5 +31,6 @@ data/
 # Environment variables
 .env
 .env.local
+.env.production
 .zshrc
 server-dist/

@@ -2,9 +2,26 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
+import { UsageFrequencyBar } from "../components/UsageFrequencyBar";
 import { useAuth } from "../contexts/AuthContext";
 import { useAdminProducts, useAdminUsers } from "../hooks/useAdmin";
 import type { AdminUser } from "../types";
+
+function formatLastSeen(dateString: string): string {
+	const date = new Date(dateString);
+	const now = Date.now();
+	const diff = now - date.getTime();
+
+	const minutes = Math.floor(diff / (1000 * 60));
+	const hours = Math.floor(diff / (1000 * 60 * 60));
+	const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+	if (minutes < 1) return "Now";
+	if (minutes < 60) return `${minutes}m ago`;
+	if (hours < 24) return `${hours}h ago`;
+	if (days < 7) return `${days}d ago`;
+	return date.toLocaleDateString();
+}
 
 export default function AdminUsers() {
 	const { token } = useAuth();
@@ -161,6 +178,7 @@ export default function AdminUsers() {
 							<th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Sub</th>
 							<th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Month</th>
 							<th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Credits</th>
+							<th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Last Seen</th>
 							<th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Status</th>
 							<th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Actions</th>
 						</tr>
@@ -168,11 +186,11 @@ export default function AdminUsers() {
 					<tbody>
 						{loading && users.length === 0 ? (
 							<tr>
-								<td colSpan={7} className="px-3 py-6 text-center text-gray-400 text-xs">Loading...</td>
+								<td colSpan={8} className="px-3 py-6 text-center text-gray-400 text-xs">Loading...</td>
 							</tr>
 						) : users.length === 0 ? (
 							<tr>
-								<td colSpan={7} className="px-3 py-6 text-center text-gray-400 text-xs">No users found</td>
+								<td colSpan={8} className="px-3 py-6 text-center text-gray-400 text-xs">No users found</td>
 							</tr>
 						) : (
 							users.map((user) => (
@@ -182,7 +200,10 @@ export default function AdminUsers() {
 											<div className="w-6 h-6 bg-gradient-to-br from-pink-500 to-cyan-500 rounded-full flex items-center justify-center text-xs font-semibold">
 												{user.username.charAt(0).toUpperCase()}
 											</div>
-											<Link to={`/admin/users/${user.id}`} className="text-sm font-medium hover:text-cyan-400">{user.username}</Link>
+											<div className="flex flex-col gap-0.5">
+												<Link to={`/admin/users/${user.id}`} className="text-sm font-medium hover:text-cyan-400">{user.username}</Link>
+												{user.dailyUsageHistory && <UsageFrequencyBar data={user.dailyUsageHistory} />}
+											</div>
 										</div>
 									</td>
 									<td className="px-3 py-2">
@@ -207,6 +228,21 @@ export default function AdminUsers() {
 									</td>
 									<td className="px-3 py-2">
 										<span className={user.credits > 0 ? "text-cyan-400" : "text-gray-500"}>{user.credits}</span>
+									</td>
+									<td className="px-3 py-2">
+										{user.lastLogin ? (
+											<span className={`text-xs ${
+												Date.now() - new Date(user.lastLogin).getTime() < 15 * 60 * 1000
+													? "text-green-400"
+													: Date.now() - new Date(user.lastLogin).getTime() < 24 * 60 * 60 * 1000
+														? "text-cyan-400"
+														: "text-gray-400"
+											}`}>
+												{formatLastSeen(user.lastLogin)}
+											</span>
+										) : (
+											<span className="text-gray-500 text-xs">Never</span>
+										)}
 									</td>
 									<td className="px-3 py-2">
 										<div className="flex gap-1">

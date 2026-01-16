@@ -311,6 +311,7 @@ export function Sidebar({
 											onChange={(e) => setEditTitle(e.target.value)}
 											onBlur={handleFinishRename}
 											onKeyDown={handleKeyDown}
+											onFocus={(e) => e.target.select()}
 											className="w-full cyber-input rounded px-2 py-1.5 text-sm"
 											autoFocus
 										/>

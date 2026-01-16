@@ -180,3 +180,42 @@ export function blobToFile(blob: Blob, originalFile: File): File {
 	const name = originalFile.name.replace(/\.[^.]+$/, ".jpg");
 	return new File([blob], name, { type: "image/jpeg" });
 }
+
+/**
+ * Get the dimensions of an image file
+ */
+export async function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+	const img = await loadImage(file);
+	const { width, height } = { width: img.width, height: img.height };
+	URL.revokeObjectURL(img.src);
+	return { width, height };
+}
+
+/**
+ * Find the closest matching aspect ratio from available options
+ */
+export function findClosestAspectRatio(
+	width: number,
+	height: number,
+	options: string[] = ["1:1", "4:3", "3:4", "16:9", "9:16"],
+): string {
+	const imageRatio = width / height;
+
+	let closestRatio = options[0];
+	let smallestDiff = Number.POSITIVE_INFINITY;
+
+	for (const option of options) {
+		if (option === "match_input_image") continue;
+
+		const [w, h] = option.split(":").map(Number);
+		const optionRatio = w / h;
+		const diff = Math.abs(imageRatio - optionRatio);
+
+		if (diff < smallestDiff) {
+			smallestDiff = diff;
+			closestRatio = option;
+		}
+	}
+
+	return closestRatio;
+}

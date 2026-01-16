@@ -6,6 +6,7 @@ interface ChatFeedProps {
 	generations: Generation[];
 	queuedItems: QueuedGeneration[];
 	onVariations: (gen: Generation) => void;
+	onVaryImage?: (imageUrl: string, prompt: string) => void;
 	onUpscale: (gen: Generation) => void;
 	onRemix: (gen: Generation) => void;
 	onTrash: (id: string) => void;
@@ -19,6 +20,7 @@ export function ChatFeed({
 	generations,
 	queuedItems,
 	onVariations,
+	onVaryImage,
 	onUpscale,
 	onRemix,
 	onTrash,
@@ -93,6 +95,7 @@ export function ChatFeed({
 					key={gen.id}
 					generation={gen}
 					onVariations={onVariations}
+					onVaryImage={onVaryImage}
 					onUpscale={onUpscale}
 					onRemix={onRemix}
 					onTrash={onTrash}

@@ -115,6 +115,47 @@ export function recordDailyUsage(userId: string): void {
 }
 
 /**
+ * Get user's usage history for the last N days
+ * Returns an array of { date, imageCount } sorted by date ascending
+ */
+export function getUserUsageHistory(userId: string, days = 30): { date: string; imageCount: number }[] {
+	const db = getDb();
+
+	// Get dates for the last N days
+	const endDate = new Date();
+	const startDate = new Date();
+	startDate.setDate(startDate.getDate() - days + 1);
+
+	const startDateStr = startDate.toISOString().split("T")[0];
+	const endDateStr = endDate.toISOString().split("T")[0];
+
+	const usage = db
+		.prepare(
+			`SELECT date, image_count FROM usage_daily
+			WHERE user_id = ? AND date >= ? AND date <= ?
+			ORDER BY date ASC`
+		)
+		.all(userId, startDateStr, endDateStr) as { date: string; image_count: number }[];
+
+	// Create a map for quick lookup
+	const usageMap = new Map(usage.map(u => [u.date, u.image_count]));
+
+	// Fill in all days (including zeros)
+	const result: { date: string; imageCount: number }[] = [];
+	const current = new Date(startDate);
+	while (current <= endDate) {
+		const dateStr = current.toISOString().split("T")[0];
+		result.push({
+			date: dateStr,
+			imageCount: usageMap.get(dateStr) || 0
+		});
+		current.setDate(current.getDate() + 1);
+	}
+
+	return result;
+}
+
+/**
  * Get user's active subscription and associated product
  */
 export function getUserSubscription(userId: string): {

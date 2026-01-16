@@ -8,7 +8,6 @@ const FROM_EMAIL = process.env.FROM_EMAIL || "onboarding@resend.dev";
 export async function sendWelcomeEmail(
 	email: string,
 	username: string,
-	password: string,
 ): Promise<{ success: boolean; error?: string }> {
 	if (!process.env.RESEND_API_KEY) {
 		console.warn("RESEND_API_KEY not configured, skipping email");
@@ -19,7 +18,7 @@ export async function sendWelcomeEmail(
 		const { error } = await resend.emails.send({
 			from: FROM_EMAIL,
 			to: email,
-			subject: "Welcome to ollo.art - Your Account Details",
+			subject: "Welcome to ollo.art",
 			html: `
 <!DOCTYPE html>
 <html>
@@ -35,17 +34,10 @@ export async function sendWelcomeEmail(
   <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
     <p style="font-size: 16px;">Hi <strong>${username}</strong>,</p>
 
-    <p style="font-size: 16px;">Your account has been created. Here are your login credentials:</p>
-
-    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
-      <p style="margin: 0 0 10px 0;"><strong>Username:</strong> ${username}</p>
-      <p style="margin: 0;"><strong>Password:</strong> <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${password}</code></p>
-    </div>
-
-    <p style="font-size: 14px; color: #6b7280;">We recommend changing your password after your first login.</p>
+    <p style="font-size: 16px;">Your account has been created and is ready to use.</p>
 
     <a href="${APP_URL}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; margin: 20px 0;">
-      Log In Now
+      Get Started
     </a>
 
     <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">

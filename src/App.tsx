@@ -18,6 +18,7 @@ import { WelcomeScreen } from "./components/WelcomeScreen";
 import type { ProjectMetadata } from "./types/ollo";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { useEnhancePrompt, useGenerate, useHistory, useModels, useThreads, useUploads } from "./hooks/useApi";
+import { useUserUsage } from "./hooks/useUserSettings";
 import { AdminLayout } from "./pages/AdminLayout";
 import { Billing } from "./pages/Billing";
 
@@ -45,7 +46,7 @@ import "./App.css";
 
 function MainApp() {
 	const { user, token, loading: authLoading, logout } = useAuth();
-	const [selectedModel, setSelectedModel] = useState("google/nano-banana-pro");
+	const [selectedModel, setSelectedModel] = useState("black-forest-labs/flux-2-dev");
 	const [imageInputs, setImageInputs] = useState<string[]>([]);
 	const [showTrash] = useState(false);
 	const [showArchived] = useState(false);
@@ -100,6 +101,7 @@ function MainApp() {
 		loading: historyLoading,
 	} = useHistory(token);
 	const { uploads, fetchUploads, archiveUpload, unarchiveUpload, deleteUpload } = useUploads(token);
+	const { usage: userUsage, fetchUsage: fetchUserUsage } = useUserUsage(token);
 
 	const selectedModelInfo = models.find((m) => m.id === selectedModel);
 	const supportsImageInput = selectedModelInfo?.supportsImageInput || false;
@@ -146,8 +148,9 @@ function MainApp() {
 					if (result.threadId) {
 						fetchThread(result.threadId);
 					}
-					// Refresh gallery history
+					// Refresh gallery history and usage counter
 					refreshHistory();
+					fetchUserUsage();
 				} else {
 					setGenerationQueue((prev) =>
 						prev.map((item) =>
@@ -190,8 +193,9 @@ function MainApp() {
 			fetchThreads();
 			refreshHistory();
 			fetchUploads(showArchived);
+			fetchUserUsage();
 		}
-	}, [token, fetchThreads, refreshHistory, fetchUploads, showArchived]);
+	}, [token, fetchThreads, refreshHistory, fetchUploads, showArchived, fetchUserUsage]);
 
 	useEffect(() => {
 		if (!supportsImageInput) {
@@ -264,10 +268,15 @@ function MainApp() {
 		const queueId = crypto.randomUUID();
 		const randomSeed = Math.floor(Math.random() * 2147483647);
 
+		// If this is already a variation (has imageInputs in parameters), use the original source
+		// This ensures "Vary Again" always uses the original image, not the variation
+		const originalImageInputs = gen.parameters?.imageInputs as string[] | undefined;
+		const sourceImage = originalImageInputs?.[0] || gen.imageUrl;
+
 		const request = {
 			prompt: gen.prompt,
 			model: "black-forest-labs/flux-redux-dev",
-			imageInputs: [gen.imageUrl],
+			imageInputs: [sourceImage],
 			numOutputs: 4,
 			seed: randomSeed,
 			threadId: activeThread?.id,
@@ -286,12 +295,39 @@ function MainApp() {
 		processGeneration(queueItem, request);
 	};
 
+	// Vary a specific image from a grid (individual image selection)
+	const handleVaryImage = (imageUrl: string, prompt: string) => {
+		const queueId = crypto.randomUUID();
+		const randomSeed = Math.floor(Math.random() * 2147483647);
+
+		const request = {
+			prompt,
+			model: "black-forest-labs/flux-redux-dev",
+			imageInputs: [imageUrl],
+			numOutputs: 4,
+			seed: randomSeed,
+			threadId: activeThread?.id,
+		};
+
+		const queueItem: QueuedGeneration = {
+			id: queueId,
+			prompt: `Variations of: ${prompt}`,
+			model: "black-forest-labs/flux-redux-dev",
+			status: "queued",
+			createdAt: new Date().toISOString(),
+			threadId: activeThread?.id,
+		};
+
+		setGenerationQueue((prev) => [queueItem, ...prev]);
+		processGeneration(queueItem, request);
+	};
+
 	const handleUpscale = (gen: Generation) => {
 		if (gen.imageUrl) {
 			const queueId = crypto.randomUUID();
 			const request = {
 				prompt: gen.prompt,
-				model: "google/nano-banana-pro",
+				model: "black-forest-labs/flux-2-dev",
 				imageInputs: [gen.imageUrl],
 				aspectRatio: creationOptions.aspectRatio,
 				resolution: "4K" as const,
@@ -302,7 +338,7 @@ function MainApp() {
 			const queueItem: QueuedGeneration = {
 				id: queueId,
 				prompt: gen.prompt,
-				model: "google/nano-banana-pro",
+				model: "black-forest-labs/flux-2-dev",
 				status: "queued",
 				createdAt: new Date().toISOString(),
 				threadId: activeThread?.id,
@@ -318,7 +354,7 @@ function MainApp() {
 	const handleRemix = (gen: Generation) => {
 		if (gen.imageUrl) {
 			setImageInputs([gen.imageUrl]);
-			setSelectedModel("google/nano-banana-pro");
+			setSelectedModel("black-forest-labs/flux-2-dev");
 		}
 	};
 
@@ -333,7 +369,7 @@ function MainApp() {
 			});
 			// If model doesn't support image input, switch to one that does
 			if (!supportsImageInput) {
-				setSelectedModel("google/nano-banana-pro");
+				setSelectedModel("black-forest-labs/flux-2-dev");
 			}
 		}
 	};
@@ -499,9 +535,11 @@ function MainApp() {
 					</div>
 					<div className="flex items-center gap-3">
 						<ModelsHelpButton onClick={() => setShowModelsRef(true)} />
-						{history?.totalCost !== undefined && (
+						{userUsage?.limits?.dailyImageLimit && (
 							<div className="text-xs text-[var(--text-secondary)]">
-								Total: <span className="text-[var(--accent)]">${history.totalCost.toFixed(4)}</span>
+								Today: <span className="text-[var(--accent)]">
+									{userUsage.dailyUsage?.imageCount ?? 0} / {userUsage.limits.dailyImageLimit}
+								</span>
 							</div>
 						)}
 						<ThemeSwitcher compact />
@@ -517,6 +555,7 @@ function MainApp() {
 									onPromptClick={handlePromptClick}
 									onCategoryClick={handleCategoryClick}
 									onStartWithOllo={handleStartWithOllo}
+									onOpenModelGuide={() => setShowModelsRef(true)}
 								/>
 							) : !activeThread && threads.length > 0 && !generationQueue.some((q) => !q.threadId) ? (
 								// No thread selected but threads exist and no pending new generations - show prompt to select or create
@@ -553,6 +592,7 @@ function MainApp() {
 											(q) => !activeThread || q.threadId === activeThread.id,
 										)}
 										onVariations={handleVariations}
+										onVaryImage={handleVaryImage}
 										onUpscale={handleUpscale}
 										onRemix={handleRemix}
 										onTrash={handleTrash}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE } from "../config";
 import { isVariationModel, modelRequiresImage } from "../config/models";
 import type { Model } from "../types";
-import { blobToFile, convertHeicToPng, isHeicFile, resizeImageIfNeeded } from "../utils/imageResize";
+import { blobToFile, convertHeicToPng, findClosestAspectRatio, getImageDimensions, isHeicFile, resizeImageIfNeeded } from "../utils/imageResize";
 import { ImagePicker } from "./ImagePicker";
 import { ImageRequiredTooltip, ModelInfoTooltip } from "./ModelInfoTooltip";
 
@@ -175,6 +175,8 @@ export function CreationPanel({
 		try {
 			const newUrls: string[] = [];
 			const errors: string[] = [];
+			let firstImageDimensions: { width: number; height: number } | null = null;
+
 			for (let file of Array.from(files)) {
 				// Check if file is an image (including HEIC)
 				const isImage = file.type.startsWith("image/") || isHeicFile(file);
@@ -195,6 +197,15 @@ export function CreationPanel({
 					}
 				}
 
+				// Detect dimensions of first image to auto-set aspect ratio
+				if (imageInputs.length === 0 && newUrls.length === 0 && !firstImageDimensions) {
+					try {
+						firstImageDimensions = await getImageDimensions(file);
+					} catch (err) {
+						console.error("Failed to get image dimensions:", err);
+					}
+				}
+
 				try {
 					const upload = await uploadFile(file);
 					newUrls.push(upload.imageUrl);
@@ -203,6 +214,20 @@ export function CreationPanel({
 					errors.push(`Failed to upload ${file.name}`);
 				}
 			}
+
+			// Auto-set aspect ratio to match first uploaded image
+			if (firstImageDimensions && newUrls.length > 0) {
+				const availableRatios = ASPECT_RATIOS.map((r) => r.value);
+				const closestRatio = findClosestAspectRatio(
+					firstImageDimensions.width,
+					firstImageDimensions.height,
+					availableRatios,
+				);
+				if (closestRatio !== options.aspectRatio) {
+					onOptionsChange({ ...options, aspectRatio: closestRatio });
+				}
+			}
+
 			onImagesChange([...imageInputs, ...newUrls]);
 			if (errors.length > 0) {
 				setUploadError(errors.join(", "));

@@ -132,6 +132,7 @@ export interface AdminUser {
 	currentMonth: UserUsage;
 	subscription: UserSubscription | null;
 	credits: number;
+	dailyUsageHistory?: { date: string; imageCount: number }[];
 }
 
 export interface AdminUserDetail extends AdminUser {
@@ -191,11 +192,15 @@ export interface UserSubscriptionInfo {
 export interface UserUsageInfo {
 	yearMonth: string;
 	usage: UserUsage;
+	dailyUsage?: {
+		imageCount: number;
+	};
 	canGenerate: boolean;
 	limitReason?: string;
 	limits?: {
 		monthlyImageLimit: number | null;
 		monthlyCostLimit: number | null;
+		dailyImageLimit: number | null;
 	};
 }
 

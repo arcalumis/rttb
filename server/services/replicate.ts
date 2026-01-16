@@ -414,9 +414,14 @@ async function buildModelInput(
 		if (imageDataUris.length === 0) {
 			throw new Error("FLUX Redux requires an input image (redux_image)");
 		}
+		// Redux only supports specific aspect ratios, not "match_input_image"
+		const validReduxAspectRatios = ["1:1", "16:9", "21:9", "3:2", "2:3", "4:5", "5:4", "3:4", "4:3", "9:16", "9:21"];
+		const reduxAspectRatio = validReduxAspectRatios.includes(options.aspectRatio || "")
+			? options.aspectRatio
+			: "1:1";
 		const input: Record<string, unknown> = {
 			redux_image: imageDataUris[0], // Single image required
-			aspect_ratio: options.aspectRatio || "1:1",
+			aspect_ratio: reduxAspectRatio,
 			output_format: options.outputFormat || "webp",
 			megapixels: "1",
 		};

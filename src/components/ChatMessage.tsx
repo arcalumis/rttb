@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { API_BASE } from "../config";
 import type { Generation, GenerationImage, QueuedGeneration } from "../types";
 import { GenerationProgressBar } from "./GenerationProgressBar";
-import { IconDownload, IconRemix, IconTrash, IconUpscale, IconVariations } from "./Icons";
+import { IconDownload, IconRemix, IconRotate, IconTrash, IconUpscale, IconVariations, IconZoom } from "./Icons";
+import { Lightbox } from "./Lightbox";
 
 interface ChatMessageProps {
 	generation: Generation | QueuedGeneration;
 	onVariations?: (gen: Generation) => void;
+	onVaryImage?: (imageUrl: string, prompt: string) => void;
 	onUpscale?: (gen: Generation) => void;
 	onRemix?: (gen: Generation) => void;
 	onTrash?: (id: string) => void;
@@ -17,27 +20,62 @@ function ImageGrid({
 	images,
 	prompt,
 	onImageClick,
+	onVaryImage,
+	onZoom,
 }: {
 	images: GenerationImage[];
 	prompt: string;
 	onImageClick?: (url: string) => void;
+	onVaryImage?: (imageUrl: string) => void;
+	onZoom?: (imageUrl: string) => void;
 }) {
 	return (
 		<div className="grid grid-cols-2 gap-2 max-w-md">
 			{images.map((img, index) => (
-				<button
-					key={img.id}
-					type="button"
-					onClick={() => onImageClick?.(img.url)}
-					className="block rounded-lg overflow-hidden cyber-card hover:neon-border transition-all cursor-pointer aspect-square"
-				>
-					<img
-						src={`${API_BASE}${img.url}`}
-						alt={`${prompt} - variation ${index + 1}`}
-						className="w-full h-full object-cover"
-						loading="lazy"
-					/>
-				</button>
+				<div key={img.id} className="relative group aspect-square">
+					<button
+						type="button"
+						onClick={() => onZoom?.(img.url)}
+						className="block w-full h-full rounded-lg overflow-hidden cyber-card hover:neon-border transition-all cursor-pointer"
+					>
+						<img
+							src={`${API_BASE}${img.url}`}
+							alt={`${prompt} - variation ${index + 1}`}
+							className="w-full h-full object-cover"
+							loading="lazy"
+						/>
+					</button>
+					{/* Hover overlay with actions */}
+					<div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2 pointer-events-none">
+						{onVaryImage && (
+							<button
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation();
+									onVaryImage(img.url);
+								}}
+								className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-black rounded-lg transition-colors pointer-events-auto"
+								title="Create variations of this image"
+							>
+								<IconVariations className="w-4 h-4" />
+								<span>Vary</span>
+							</button>
+						)}
+						{onImageClick && (
+							<button
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation();
+									onImageClick(img.url);
+								}}
+								className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:neon-border rounded-lg transition-all pointer-events-auto"
+								title="Add to selected images"
+							>
+								<span>+ Select</span>
+							</button>
+						)}
+					</div>
+				</div>
 			))}
 		</div>
 	);
@@ -55,6 +93,7 @@ function formatTime(dateString: string): string {
 export function ChatMessage({
 	generation,
 	onVariations,
+	onVaryImage,
 	onUpscale,
 	onRemix,
 	onTrash,
@@ -70,6 +109,16 @@ export function ChatMessage({
 	// Check for multi-image variations (4-up grid)
 	const images = !isQueued ? (generation as Generation).images : undefined;
 	const hasMultipleImages = images && images.length > 1;
+
+	// Lightbox state
+	const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+	// Rotation state (0, 90, 180, 270 degrees)
+	const [rotation, setRotation] = useState(0);
+
+	const handleRotate = () => {
+		setRotation((prev) => (prev + 90) % 360);
+	};
 
 	return (
 		<div className="py-4">
@@ -117,12 +166,14 @@ export function ChatMessage({
 						images={images}
 						prompt={generation.prompt}
 						onImageClick={(url) => {
-							// Create a synthetic generation for the clicked image
+							// Add image to selected inputs
 							if (onImageClick && !isQueued) {
 								const gen = generation as Generation;
 								onImageClick({ ...gen, imageUrl: url });
 							}
 						}}
+						onVaryImage={onVaryImage ? (url) => onVaryImage(url, generation.prompt) : undefined}
+						onZoom={(url) => setLightboxUrl(`${API_BASE}${url}`)}
 					/>
 
 					{/* Action buttons for grid */}
@@ -163,7 +214,8 @@ export function ChatMessage({
 						<img
 							src={`${API_BASE}${imageUrl}`}
 							alt={generation.prompt}
-							className="w-full h-auto"
+							className="w-full h-auto transition-transform duration-200"
+							style={{ transform: rotation ? `rotate(${rotation}deg)` : undefined }}
 							loading="lazy"
 						/>
 					</button>
@@ -212,6 +264,22 @@ export function ChatMessage({
 							>
 								<IconDownload className="w-4 h-4" />
 							</a>
+							<button
+								type="button"
+								onClick={() => setLightboxUrl(`${API_BASE}${imageUrl}`)}
+								className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:neon-border rounded-lg transition-all"
+								title="View full size"
+							>
+								<IconZoom className="w-4 h-4" />
+							</button>
+							<button
+								type="button"
+								onClick={handleRotate}
+								className="flex items-center gap-1.5 px-3 py-1.5 text-xs cyber-card hover:neon-border rounded-lg transition-all"
+								title="Rotate image"
+							>
+								<IconRotate className="w-4 h-4" />
+							</button>
 							{onTrash && (
 								<button
 									type="button"
@@ -226,6 +294,16 @@ export function ChatMessage({
 					)}
 				</div>
 			) : null}
+
+			{/* Lightbox */}
+			{lightboxUrl && (
+				<Lightbox
+					imageUrl={lightboxUrl}
+					alt={generation.prompt}
+					onClose={() => setLightboxUrl(null)}
+					rotation={rotation}
+				/>
+			)}
 		</div>
 	);
 }

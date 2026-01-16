@@ -4,6 +4,7 @@ interface WelcomeScreenProps {
 	onPromptClick: (prompt: string) => void;
 	onCategoryClick: (category: string) => void;
 	onStartWithOllo?: () => void;
+	onOpenModelGuide?: () => void;
 }
 
 const categories = [
@@ -22,7 +23,7 @@ const suggestions = [
 	"Futuristic city skyline at golden hour",
 ];
 
-export function WelcomeScreen({ onPromptClick, onCategoryClick, onStartWithOllo }: WelcomeScreenProps) {
+export function WelcomeScreen({ onPromptClick, onCategoryClick, onStartWithOllo, onOpenModelGuide }: WelcomeScreenProps) {
 	return (
 		<div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
 			{/* Main Heading */}
@@ -82,12 +83,18 @@ export function WelcomeScreen({ onPromptClick, onCategoryClick, onStartWithOllo 
 				</div>
 			</div>
 
-			{/* Decorative Element */}
-			<div className="mt-12 flex items-center gap-3 text-xs text-[var(--text-secondary)]">
-				<div className="w-8 h-px bg-[var(--border)]" />
-				<span className="mono">powered by FLUX</span>
-				<div className="w-8 h-px bg-[var(--border)]" />
-			</div>
+			{/* Model Guide CTA */}
+			{onOpenModelGuide && (
+				<button
+					type="button"
+					onClick={onOpenModelGuide}
+					className="mt-12 text-xs text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors flex items-center gap-2"
+				>
+					<span>New here?</span>
+					<span className="text-[var(--accent)] underline underline-offset-2">Check out our model guide</span>
+					<span>→</span>
+				</button>
+			)}
 		</div>
 	);
 }

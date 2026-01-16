@@ -1,10 +1,7 @@
-# Production docker-compose with Caddy reverse proxy
-# Usage: docker compose -f docker-compose.prod.yml up -d
+# Production docker-compose for ollo.art
+# Caddy reverse proxy now lives in /home/baud/caddy
 #
-# Prerequisites:
-# 1. Set DOMAIN in your environment or .env.production file
-# 2. Point your domain's DNS A record to your server's IP
-# 3. Ensure ports 80 and 443 are open
+# Usage: docker compose -f docker-compose.prod.yml up -d
 
 services:
   app:
@@ -21,37 +18,18 @@ services:
       - app_images:/app/generated-images
       - app_uploads:/app/uploads
     networks:
-      - internal
+      - web
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3001/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
-
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp" # HTTP/3 support
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    environment:
-      - DOMAIN=${DOMAIN:-localhost}
-    networks:
-      - internal
-    depends_on:
-      app:
-        condition: service_healthy
-    restart: unless-stopped
+      start_period: 15s
 
 networks:
-  internal:
-    driver: bridge
+  web:
+    external: true
 
 volumes:
   app_data:
@@ -60,7 +38,3 @@ volumes:
     name: ollo_art_images
   app_uploads:
     name: ollo_art_uploads
-  caddy_data:
-    name: ollo_art_caddy_data
-  caddy_config:
-    name: ollo_art_caddy_config

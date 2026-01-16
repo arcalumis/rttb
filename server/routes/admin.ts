@@ -4,7 +4,7 @@ import { getDb } from "../db";
 import { authMiddleware } from "../middleware/auth";
 import { sendWelcomeEmail } from "../services/email";
 import { calculateGenerationCost } from "../services/replicate";
-import { addCredits, assignSubscription, getCurrentYearMonth } from "../services/usage";
+import { addCredits, assignSubscription, getCurrentYearMonth, getUserUsageHistory } from "../services/usage";
 
 interface UserRow {
 	id: string;
@@ -197,6 +197,9 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 					.prepare("SELECT COALESCE(SUM(amount), 0) as total FROM user_credits WHERE user_id = ?")
 					.get(user.id) as CreditRow;
 
+				// Get 30-day usage history for the frequency bar
+				const dailyUsageHistory = getUserUsageHistory(user.id, 30);
+
 				return {
 					id: user.id,
 					username: user.username,
@@ -221,6 +224,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 							}
 						: null,
 					credits: credits.total,
+					dailyUsageHistory,
 				};
 			});
 
@@ -292,7 +296,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 		let emailSent = false;
 		let emailError: string | undefined;
 		if (sendEmail) {
-			const result = await sendWelcomeEmail(email, username, finalPassword);
+			const result = await sendWelcomeEmail(email, username);
 			emailSent = result.success;
 			emailError = result.error;
 		}

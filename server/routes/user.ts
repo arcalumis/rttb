@@ -8,6 +8,7 @@ import {
 	canUserGenerate,
 	getAvailableCredits,
 	getCurrentYearMonth,
+	getDailyUsage,
 	getMonthlyUsage,
 	getUserSubscription,
 } from "../services/usage";
@@ -70,6 +71,7 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
 		}
 
 		const usage = getMonthlyUsage(userId);
+		const dailyUsage = getDailyUsage(userId);
 		const result = canUserGenerate(userId);
 
 		return {
@@ -85,6 +87,9 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
 						totalCost: 0,
 						usedOwnKey: 0,
 					},
+			dailyUsage: {
+				imageCount: dailyUsage?.image_count ?? 0,
+			},
 			canGenerate: result.allowed,
 			limitReason: result.reason,
 			limits: result.limits,

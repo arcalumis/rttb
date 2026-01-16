@@ -4,7 +4,7 @@ FROM oven/bun:1 AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package.json bun.lock ./
+COPY package.json bun.lockb ./
 
 # Install all dependencies (including devDependencies for build)
 RUN bun install --frozen-lockfile
@@ -21,7 +21,7 @@ FROM oven/bun:1-slim AS production
 WORKDIR /app
 
 # Copy package files
-COPY package.json bun.lock ./
+COPY package.json bun.lockb ./
 
 # Install only production dependencies
 RUN bun install --frozen-lockfile --production
@@ -42,9 +42,9 @@ ENV PORT=3001
 # Expose the port
 EXPOSE 3001
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3001/api/health || exit 1
+# Health check using bun
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD bun -e "fetch('http://localhost:3001/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
 # Run the server
 CMD ["bun", "run", "server/index.ts"]
